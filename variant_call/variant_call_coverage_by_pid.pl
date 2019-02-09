@@ -38,7 +38,7 @@ my $response = "bam_info.tsv";
 `curl --request POST --header \"Content-Type: application/json\" --data \@$bam_json 'https://api.gdc.cancer.gov/files'|nkf -Lu >$response`;
 
 
-# rad response and make norm & tumor manifest
+# read response and make norm & tumor manifest
 my (@norm_file,@tumor_file)=((),());
 my ($norm_manifest, $tumor_manifest) = ("norm_bam/norm_manifest.tsv","tumor_bam/tumor_manifest.tsv");
 open(RES,"$response");
@@ -66,7 +66,7 @@ while(<RES>){
 				`rm -rf $line[$header_num{file_id}]/logs`;
 				`mv $line[$header_num{file_id}]/* tumor_bam/`;
 				`rm -rf $line[$header_num{file_id}]`;
-				if($partial eq "true"){push(@tumor_file,"tumor_bam/$line[$header_num{file}]");}
+				if($partial ne "true"){push(@tumor_file,"tumor_bam/$line[$header_num{file}]");}
 		}else{
 				`$gdc_client download -t $token_path $line[$header_num{file_id}]`;
 				my $partial =&check_download($line[$header_num{file_id}],$line[$header_num{file}]);
@@ -79,7 +79,7 @@ while(<RES>){
 				`rm -rf $line[$header_num{file_id}]/logs`;
 				`mv $line[$header_num{file_id}]/* norm_bam/`;
 				`rm -rf $line[$header_num{file_id}]`;
-				if($partial eq "true"){push(@norm_file,"norm_bam/$line[$header_num{file}]");}
+				if($partial ne "true"){push(@norm_file,"norm_bam/$line[$header_num{file}]");}
 		}
 }
 close RES;
@@ -104,7 +104,7 @@ if(defined$bam_file{norm} && defined$bam_file{tumor}){
 		my $mpile = "samtools mpileup -q 10 -f $ref $bam_file{norm} $bam_file{tumor}";
 		`zsh -c \"varscan somatic <\($mpile\) vcf/$pid --tumor-purity $purity --p-value 0.1 --output-vcf 1 --mpileup 1\"`;
 		open(DP,"samtools depth -Q 10 $bam_file{norm} $bam_file{tumor}|");
-		open(OUT,"|gzip -c depth.tsv.gz");
+		open(OUT,"|gzip -c >depth.tsv.gz");
 		while(<DP>){
 				chomp;
 				my @line=split(/\t/,);
