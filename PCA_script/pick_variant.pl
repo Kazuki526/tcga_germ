@@ -60,7 +60,7 @@ my $max_processes = 3;
 my $pm = new Parallel::ForkManager($max_processes);
 foreach my $outchr (@chr){
 		$pm->start and next;
-		`bash $ENV{HOME}/tcga_germ/PCA_script/git//vcf2maf.sh chr$chr`;
+		`bash $ENV{HOME}/git/tcga_germ/PCA_script/vcf2maf.sh chr$chr`;
 		$pm->finish;
 }
 $pm->wait_all_children;
