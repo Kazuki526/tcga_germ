@@ -6,7 +6,7 @@ my $pwd = `pwd`;chomp $pwd;
 if($pwd ne "/Volumes/areca42TB2/gdc/pancan_atlas_germ"){die "ERROR::done on wrong dir\n";}
 
 #read driver genes list
-%top_driver_genes =();
+my %top_driver_genes =();
 open(TDG,"$ENV{HOME}/git/innanlab/driver_genes.tsv") or die "ERROR::cannot open top driver genes file.\n";
 <TDG>;
 while(<TDG>){
@@ -27,17 +27,17 @@ open(ODGANN,">annotation_extract/other_driver_genes.maf");
 print TDGANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
 print ODGANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
 
-open(TDGVCF,"|gzip -c >extract_vcf/top_driver_genes.vcf");
-open(ODGVCF,"|gzip -c >extract_vcf/other_driver_genes.vcf");
+open(TDGVCF,"|gzip -c >extract_vcf/top_driver_genes.vcf.gz");
+open(ODGVCF,"|gzip -c >extract_vcf/other_driver_genes.vcf.gz");
 my $vcf_list = "#chr\tposi\tid\tref\talt\tqual\tfilter\tinfo\n";
 print TDGVCF "$vcf_list";
 print ODGVCF "$vcf_list";
 
-open(TDGOUT,"|gzip -c >maf_patient/top_driver_genes_patient.tsv");
-open(ODGOUT,"|gzip -c >maf_patient/other_driver_genes_patient.tsv");
+open(TDGOUT,"|gzip -c >maf_patient/top_driver_genes_patient.tsv.gz");
+open(ODGOUT,"|gzip -c >maf_patient/other_driver_genes_patient.tsv.gz");
 my $out_list = "patient_id\tchr\tposi\tref\tallele1\tallele2\tfilter\tDP\tAD\tgene\tConsequence\tIMPACT\n";
-print TDGOUT "$out_lsit";
-print ODGOUT "$out_lsit";
+print TDGOUT "$out_list";
+print ODGOUT "$out_list";
 
 my $chr="";
 my %focal_site=();
@@ -56,12 +56,12 @@ while(<VCF>){
 		my @line = split(/\t/,);
 		if($line[0] ne $chr){
 				if($chr ne ""){
-						print "done\n";$|=1;
+						print "done chr$chr\n";$|=1;
 						close EXVCF;
 						close EXOUT;
 				}
 				$chr =$line[0];
-				print "start chr$chr =>";$|=1;
+				print "start chr$chr => ";$|=1;
 				%focal_site = &pull_focal_site_from_maf($chr);
 				open(EXVCF,">extract_vcf/chr$chr.vcf");
 				print EXVCF "$vcf_list";
