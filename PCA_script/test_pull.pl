@@ -16,19 +16,21 @@ while(<TDG>){
 }
 close TDG;
 
-my $vcf_file = "raw_file/PCA.r1.TCGAbarcode.merge.tnSwapCorrected.10389.vcf.gz";
+#my $vcf_file = "raw_file/PCA.r1.TCGAbarcode.merge.tnSwapCorrected.10389.vcf.gz";
+my $vcf_file = "raw_file/PCA.r1.TCGAbarcode.merge.tnSwapCorrected.10389.vcf";
 -e $vcf_file or die "ERROR::not exist $vcf_file\n";
 
 
-open(VCF,"gunzip -c $vcf_file|");
+#open(VCF,"gunzip -c $vcf_file|");
+open(VCF,"$vcf_file");
 my @ann_list = qw(Chromosome Start_Position End_Position Strand Reference_Allele Tumor_Seq_Allele2 Consequence IMPACT Gene HGVSc HGVSp cDNA_position CDS_position Protein_position Amino_acids Codons CANONICAL SIFT PolyPhen Feature);
 open(TDGANN,">annotation_extract/top_driver_genes.maf");
 open(ODGANN,">annotation_extract/other_driver_genes.maf");
 print TDGANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
 print ODGANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
 
-open(TDGVCF,"|gzip -c >extract_vcf/top_driver_genes.vcf.gz");
-open(ODGVCF,"|gzip -c >extract_vcf/other_driver_genes.vcf.gz");
+open(TDGVCF,">extract_vcf/top_driver_genes.vcf");
+open(ODGVCF,">extract_vcf/other_driver_genes.vcf");
 my $vcf_list = "#chr\tposi\tid\tref\talt\tqual\tfilter\tinfo\n";
 print TDGVCF "$vcf_list";
 print ODGVCF "$vcf_list";
@@ -44,15 +46,15 @@ my %focal_site=();
 my @col_info=();
 while(<VCF>){
 		if($_ =~ /^##/){next;}
+		chomp;
 		if($_ =~ /^#/){$_ =~ s/#//;@col_info=split(/\t/,);next;}
 		if($_ =~ /^$chr\t/){
 				if($_=~/^$chr\t(\d+)\t\S+\t(\w+)\t(\w+)\t/){
 						my($posi,$ref,$alt)=($1,$2,$3);
 						if(length($ref) != length($alt)){($posi,$ref,$alt)=&indel_posi_edit($posi,$ref,$alt);}
 						if(!defined $focal_site{"$chr:$posi:$ref:$alt"}){next;}
-				}
+				}else{next;}
 		}
-		chomp;
 		my @line = split(/\t/,);
 		if($line[0] ne $chr){
 				if($chr ne ""){
@@ -63,11 +65,12 @@ while(<VCF>){
 				$chr =$line[0];
 				print "start chr$chr => ";$|=1;
 				%focal_site = &pull_focal_site_from_maf($chr);
-				open(EXVCF,"|gzip -c >extract_vcf/chr$chr.vcf.gz");
+				open(EXVCF,">extract_vcf/chr$chr.vcf");
 				print EXVCF "$vcf_list";
-				open(EXOUT,"|gzip -c >maf_patient/chr$chr.tsv.gz");
+				open(EXOUT,">maf_patient/chr$chr.tsv");
 				print EXOUT "$out_list";
-				print "finish read MAF file =>";$|=1;
+				my $site_num = scalar(keys%focal_site);
+				print "finish read MAF file focal_site =$site_num => ";$|=1;
 		}
 		my($DP_posi,$AD_posi)=(3,5);
 		if($line[8] ne "GT:GQ:SDP:DP:RD:AD:FREQ:PVAL:RBQ:ABQ:RDF:RDR:ADF:ADR"){
@@ -80,61 +83,7 @@ while(<VCF>){
 				if((!defined $format[$DP_posi])||($format[$DP_posi] ne "DP")){$DP_posi = 100;}
 				if((!defined $format[$AD_posi])||($format[$AD_posi] ne "AD")){$AD_posi = 100;}
 		}
-		if($line[4] =~/,/){
-				my $focal_exist=0;
-				my @focal =(0);
-				my @posi=($line[1]);
-				my @ref=($line[3]);
-				my @alt=($line[3]);
-				my @variant=split(/,/,$line[4]);
-				my @het=(0);my @hom=(0);
-				for(my$i=1;$i<=scalar(@variant);$i++){
-						($posi[$i],$ref[$i],$alt[$i]) = &indel_posi_edit($line[1],$line[3],$variant[$i-1]);
-						if(defined$focal_site{"$line[0]:$posi[$i]:$ref[$i]:$alt[$i]"}){$focal_exist++;$focal[$i]=1;}else{$focal[$i]=0;}
-						$het[$i]=0;$hom[$i]=0;
-				}
-				if($focal_exist==0){next;}
-				for(my $ind =9;$ind<scalar(@col_info);$ind++){
-						if($line[$ind] =~ /^\./){next;}
-						my @format = split(/:/,$line[$ind]);
-						if($format[0] !~ /^\d+\/\d+$/){die "ERROR::FORMAT error $line[0] $line[1] patient $ind:$col_info[$ind] FORMAT:$line[8] => $line[$ind]\n";}
-						my @allele=split(/\//,$format[0]);
-						my $out_format = "";
-						if($DP_posi == 100){$out_format="NA\t";}else{$out_format="$format[$DP_posi]\t";}
-						if($AD_posi == 100){$out_format.="NA\t";}else{$out_format.="$format[$AD_posi]\t";}
-						if(($allele[0] != $allele[1])&&($allele[0] !=0)){
-								my($a0,$a1)=@allele;
-								if(($focal[$a0]==0)&&($focal[$a1]==0)){next;}
-								my($allele0,$allele1)=("$line[0]:$posi[$a0]:$ref[$a0]:$alt[$a0]","$line[0]:$posi[$a1]:$ref[$a1]:$alt[$a1]");
-								$het[$a0]++;$het[$a1]++;
-								my $out = "$col_info[$ind]\t$line[0]\t$posi[$a0]\t$ref[$a0]\t$alt[$a0]\tNA\t$line[6]\t$out_format\t";
-								$out.= "$focal_site{$allele0}{gene}\t$focal_site{$allele0}{Consequence}\t$focal_site{$allele0}{IMPACT}\n";
-								&print_out($out,$focal_site{$allele0}{gene});
-								$out = "$col_info[$ind]\t$line[0]\t$posi[$a1]\t$ref[$a1]\tNA\t$alt[$a1]\t$line[6]\t$out_format\t";
-								$out.= "$focal_site{$allele1}{gene}\t$focal_site{$allele1}{Consequence}\t$focal_site{$allele1}{IMPACT}\n";
-								&print_out($out,$focal_site{$allele1}{gene});
-						}else{
-								my $a=$allele[1];
-								if($focal[$a]==0){next;}
-								my $allele = "$line[0]:$posi[$a]:$ref[$a]:$alt[$a]";
-								if($allele[0]==0){
-										$het[$a]++;
-										my $out = "$col_info[$ind]\t$line[0]\t$posi[$a]\t$ref[$a]\t$ref[$a]\t$alt[$a]\t$line[6]\t$out_format\t";
-										$out.= "$focal_site{$allele}{gene}\t$focal_site{$allele}{Consequence}\t$focal_site{$allele}{IMPACT}\n";
-										&print_out($out,$focal_site{$allele}{gene});
-								}else{
-										$hom[$a]++;
-										my $out = "$col_info[$ind]\t$line[0]\t$posi[$a]\t$ref[$a]\t$alt[$a]\t$alt[$a]\t$line[6]\t$out_format\t";
-										$out.= "$focal_site{$allele}{gene}\t$focal_site{$allele}{Consequence}\t$focal_site{$allele}{IMPACT}\n";
-										&print_out($out,$focal_site{$allele}{gene});
-								}
-						}
-				}
-				for(my$i=1;$i<=scalar(@variant);$i++){
-						if($focal[$i] ==0){next;}
-						my $vcf = "$line[0]\t$posi[$i]\t$line[2]\t$ref[$i]\t$alt[$i]\t$line[5]\t$line[6]\t$line[7];het_sample=$het[$i];hom_sample=$hom[$i]\n";
-						&print_vcf($vcf,$focal_site{"$line[0]:$posi[$i]:$ref[$i]:$alt[$i]"}{gene});
-				}
+		if($line[4] =~/,/){next;
 		}else{
 				my($posi,$ref,$alt) = ($line[1],$line[3],$line[4]);
 				if(length($ref) != length($alt)){($posi,$ref,$alt)=&indel_posi_edit($posi,$ref,$alt);}
@@ -152,19 +101,21 @@ while(<VCF>){
 								$het++;
 								my $out = "$col_info[$ind]\t$line[0]\t$posi\t$ref\t$ref\t$alt\t$line[6]\t$out_format";
 								$out.= "$focal_site{$allele}{gene}\t$focal_site{$allele}{Consequence}\t$focal_site{$allele}{IMPACT}\n";
-								&print_out($out,$focal_site{$allele}{gene});
+								print TDGOUT "$out";
 						}elsif($format[0] eq "1/1"){
 								$hom++;
 								my $out = "$col_info[$ind]\t$line[0]\t$posi\t$ref\t$alt\t$alt\t$line[6]\t$out_format";
 								$out.= "$focal_site{$allele}{gene}\t$focal_site{$allele}{Consequence}\t$focal_site{$allele}{IMPACT}\n";
-								&print_out($out,$focal_site{$allele}{gene});
-						}#else{print  "\nWARNING::what genotype or allele: $allele => $ind th FORMAT: $line[$ind]\n";}
+								print TDGOUT "$out";
+						}else{print  "\nWARNINGS::what genotype $allele $ind th colum => $line[$ind]\n";}
 				}
 				$vcf = join("\t",@line[0..7]) .";het_sample=$het;hom_sample=$hom\n";
-				&print_vcf($vcf,$focal_site{$allele}{gene});
+				print TDGVCF "$vcf";
 		}
 }
-print "done chr$chr\n";$|=1;
+close EXVCF;
+close EXOUT;
+
 close VCF;
 close TDGANN;
 close ODGANN;
@@ -172,9 +123,6 @@ close TDGVCF;
 close ODGVCF;
 close TDGOUT;
 close ODGOUT;
-close EXVCF;
-close EXOUT;
-
 
 sub header2hash ( $ ){
 		my $header = $_[0];
@@ -190,16 +138,21 @@ sub pull_focal_site_from_maf( $ ){
 		my $chr = $_[0];
 		open(EXANN,">annotation_extract/chr$chr.maf") or die "ERROR::cannot open annotation_extract\n";
 		print EXANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
-		open(MAF,"annotation/chr$chr"."_snp.maf") or die "ERROR::cannot open chr$chr maf file";
+		open(MAF,"test/chr$chr"."_snp.maf") or die "ERROR::cannot open chr$chr maf file";
 		<MAF>;
 		my $header = <MAF>;chomp$header;
+		if($header !~ /^Hugo_Symbol\t/){die "ERROR::maf_snp header reading miss\n";}
 		my %col=&header2hash($header);
 		my %maf_focal =();
 		while(<MAF>){
 				chomp;
+				my $gene;
+				if($_=~ /^(\S+)\t/){$gene=$1;}else{next;}
+				if(!defined $top_driver_genes{$gene}){next;}
+				if($top_driver_genes{$gene} <4){next;}
 				my @line = split(/\t/,);
 				if(($line[$col{IMPACT}] eq "MODIFIER")||($line[$col{BIOTYPE}] ne "protein_coding")){next;}
-				my $gene = $line[$col{Hugo_Symbol}];
+#				my $gene = $line[$col{Hugo_Symbol}];
 				$maf_focal{"$line[$col{Chromosome}]:$line[$col{Start_Position}]:$line[$col{Reference_Allele}]:$line[$col{Tumor_Seq_Allele2}]"}{gene} = $line[$col{Hugo_Symbol}];
 				$maf_focal{"$line[$col{Chromosome}]:$line[$col{Start_Position}]:$line[$col{Reference_Allele}]:$line[$col{Tumor_Seq_Allele2}]"}{IMPACT} = $line[$col{IMPACT}];
 				$maf_focal{"$line[$col{Chromosome}]:$line[$col{Start_Position}]:$line[$col{Reference_Allele}]:$line[$col{Tumor_Seq_Allele2}]"}{Consequence} = $line[$col{Consequence}];
@@ -218,15 +171,20 @@ sub pull_focal_site_from_maf( $ ){
 				}
 		}
 		close MAF;
-		open(MAF,"annotation/chr$chr"."_indel.maf") or die "ERROR::cannot open chr$chr maf file";
+		open(MAF,"test/chr$chr"."_indel.maf") or die "ERROR::cannot open chr$chr maf file";
 		<MAF>;
 		$header = <MAF>;chomp$header;
+		if($header !~ /^Hugo_Symbol\t/){die "ERROR::maf_indel header reading miss\n";}
 		%col=&header2hash($header);
 		while(<MAF>){
 				chomp;
+				my $gene;
+				if($_=~ /^(\S+)\t/){$gene=$1;}else{next;}
+				if(!defined $top_driver_genes{$gene}){next;}
+				if($top_driver_genes{$gene} <4){next;}
 				my @line = split(/\t/,);
 				if(($line[$col{IMPACT}] eq "MODIFIER")||($line[$col{BIOTYPE}] ne "protein_coding")){next;}
-				my $gene = $line[$col{Hugo_Symbol}];
+#				my $gene = $line[$col{Hugo_Symbol}];
 				$maf_focal{"$line[$col{Chromosome}]:$line[$col{Start_Position}]:$line[$col{Reference_Allele}]:$line[$col{Tumor_Seq_Allele2}]"}{gene} = $line[$col{Hugo_Symbol}];
 				$maf_focal{"$line[$col{Chromosome}]:$line[$col{Start_Position}]:$line[$col{Reference_Allele}]:$line[$col{Tumor_Seq_Allele2}]"}{IMPACT} = $line[$col{IMPACT}];
 				$maf_focal{"$line[$col{Chromosome}]:$line[$col{Start_Position}]:$line[$col{Reference_Allele}]:$line[$col{Tumor_Seq_Allele2}]"}{Consequence} = $line[$col{Consequence}];
@@ -250,17 +208,13 @@ sub pull_focal_site_from_maf( $ ){
 
 sub indel_posi_edit( $ $ $ ){
 		my ( $pos, $ref, $var ) = @_;
-		if(length($ref) == length($var)){
-				return($pos,$ref,$var);
-		}else{
-				my ( $ref_length, $var_length ) = ( length( $ref ), length( $var ));
-				while( $ref and $var and substr( $ref, 0, 1 ) eq substr( $var, 0, 1 ) and $ref ne $var ) {
-						( $ref, $var ) = map{$_ = substr( $_, 1 ); ( $_ ? $_ : "-" )} ( $ref, $var );
-						--$ref_length; --$var_length; ++$pos;
-				}
-				$pos =($ref eq "-" ? $pos-1 : $pos);
-				return($pos,$ref,$var);
+		my ( $ref_length, $var_length ) = ( length( $ref ), length( $var ));
+		while( $ref and $var and substr( $ref, 0, 1 ) eq substr( $var, 0, 1 ) and $ref ne $var ) {
+				( $ref, $var ) = map{$_ = substr( $_, 1 ); ( $_ ? $_ : "-" )} ( $ref, $var );
+				--$ref_length; --$var_length; ++$pos;
 		}
+		$pos =($ref eq "-" ? $pos-1 : $pos);
+		return($pos,$ref,$var);
 }
 
 sub print_out ( $ $ ){
@@ -279,12 +233,12 @@ sub print_vcf ( $ $ ){
 		my($vcf,$gene)=@_;
 		if(defined $top_driver_genes{$gene}){
 				if($top_driver_genes{$gene} >= 4){
-						print TDGVCF "$vcf";
+						print TDGOUT "$vcf";
 				}else{
-						print ODGVCF "$vcf";
+						print ODGOUT "$vcf";
 				}
 		}else{
-				print EXVCF "$vcf";
+				print EXOUT "$vcf";
 		}
 }
 
