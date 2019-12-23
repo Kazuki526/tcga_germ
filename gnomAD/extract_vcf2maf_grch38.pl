@@ -5,14 +5,14 @@ use strict;
 my $gnomAD_version = "gnomad.exomes.r2.1.1.sites";
 
 # this script execute in gnomAD exon raw file (by chromosome) dir
-my @ls = `ls file_grch37|grep $gnomAD_version`;
+my @ls = `ls file_grch38|grep $gnomAD_version`;
 if(scalar(@ls)!= 24){die "ERROR::doing on wrong dir?\n";}
 
 #make extract dir
-mkdir "maf37";
-mkdir "maf37/all_maf";
-mkdir "maf37/non_cancer_maf";
-mkdir "maf37/control_maf";
+mkdir "maf38";
+mkdir "maf38/all_maf";
+mkdir "maf38/non_cancer_maf";
+mkdir "maf38/control_maf";
 
 #vep extract colum
 my @vep_focal = qw(SYMBOL Consequence IMPACT Gene HGVSc HGVSp cDNA_position CDS_position Protein_position Amino_acids Codons
@@ -116,11 +116,11 @@ exit;
 
 sub print_extracted_file( $ ){
 		my $chr = $_[0];
-		my $infile = "file_grch37/$gnomAD_version.$chr.vcf.bgz";
+		my $infile = "file_grch38/$gnomAD_version.$chr.liftover_grch38.vcf.bgz";
 		open(VCF,"gunzip -c $infile|");
-		open(ALL,"|gzip -c >maf37/all_maf/gnomAD_chr$chr.maf.gz");
-		open(CAN,"|gzip -c >maf37/non_cancer_maf/non_cancer_chr$chr.maf.gz");
-		open(CONT,"|gzip -c >maf37/control_maf/control_chr$chr.maf.gz");
+		open(ALL,"|gzip -c >maf38/all_maf/gnomAD_chr$chr.maf.gz");
+		open(CAN,"|gzip -c >maf38/non_cancer_maf/non_cancer_chr$chr.maf.gz");
+		open(CONT,"|gzip -c >maf38/control_maf/control_chr$chr.maf.gz");
 		print ALL "chr\tposi\tref\talt\tfilter\t". join("\t",@vep_focal) ."\trf_tp_probability\tInbreedingCoeff\t$ac_col\n";
 		print CAN "chr\tposi\tref\talt\tfilter\t". join("\t",@vep_focal) ."\trf_tp_probability\tInbreedingCoeff\t$ac_col\n";
 		print CONT "chr\tposi\tref\talt\tfilter\t". join("\t",@vep_focal) ."\trf_tp_probability\tInbreedingCoeff\t$ac_col\n";
