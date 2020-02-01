@@ -1,0 +1,253 @@
+library(tidyverse)
+library(pipeR)
+library(ggsignif)
+library(gridExtra)
+library(purrrlyr)
+setwd('/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene')
+write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append, ...) {
+  file = if (grepl('gz$', path)) {
+    gzfile(path, ...)
+  } else if (grepl('bz2$', path)) {
+    bzfile(path, ...)
+  } else if (grepl('xz$', path)) {
+    xzfile(path, ...)
+  } else {path}
+  utils::write.table(x, file,
+                     append=append, quote=FALSE, sep=delim, na=na,
+                     row.names=FALSE, col.names=col_names)
+}
+
+######################################## driver gene infomation ##########################################
+driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
+  filter(refs>3) %>>%dplyr::rename(gene_symbol=gene)%>>%
+  mutate(role=ifelse(is.na(role),"TSG/oncogene",role))%>>%
+  dplyr::select(gene_symbol,role)
+topdriver_bed=read_tsv("/Volumes/areca42TB/tcga/maf_norm/top_driver105.bed",
+                       col_names = c("chr","gene_start","gene_end","ids","score","strand"))%>>%
+  tidyr::separate(ids,c("gene_symbol","ensg"),sep=";")
+
+############################################# patient infomation ############################################
+classify_stage = function(.data) {
+  mutate(.data,
+         stage = dplyr::recode(stage,
+                               `not reported` = 0,
+                               `stage i`    = 1, `stage ia`   = 1, `stage ib`   = 1,
+                               `stage ii`   = 2, `stage iia`  = 2, `stage iib`  = 2, `stage iic`  = 2,
+                               `stage iii`  = 3, `stage iiia` = 3, `stage iiib` = 3, `stage iiic` = 3,
+                               `stage iv`   = 4, `stage iva`  = 4, `stage ivb`  = 4, `stage ivc`  = 4,
+                               `stage x`    =5))
+}
+all_patient_info=read_tsv("~/git/all_patient/all_patient_response.tsv",col_types = "cccccddccc") %>>%
+  dplyr::rename(patient_id=submitter_id,age=diagnoses.0.age_at_diagnosis,gender=demographic.gender,
+                race=demographic.race,ethnicity=demographic.ethnicity,stage=diagnoses.0.tumor_stage) %>%
+  classify_stage()
+
+patient_race = all_patient_info %>>%
+  mutate(race_=ifelse(race=="white" &ethnicity!="hispanic or latino","white",
+                      ifelse(race=="black or african american" &ethnicity!="hispanic or latino",
+                             "black","other"))) %>>%
+  mutate(race_ = ifelse(is.na(race_),"other",race_)) %>>%
+  dplyr::select(patient_id,race_) %>>%
+  dplyr::rename(race=race_)
+#write_df(all_patient_info,"/Volumes/DR8TB2/tcga_rare_germ/all_patient_info.tsv")
+#write_df(patient_race,"/Volumes/DR8TB2/tcga_rare_germ/patient_race.tsv")
+
+patient_list = read_tsv("/Volumes/areca42TB/tcga/all_patient/patient_list.tsv")
+#write_df(patient_list,"/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
+
+############################################# TCGA maf files #############################################
+classify_consequence = function(.data) {
+  mutate(.data,
+         mutype= dplyr::recode(Consequence,
+                               downstream_gene_variant = 'flank',
+                               `3_prime_UTR_variant` = 'flank',
+                               `3_prime_UTR_variant,NMD_transcript_variant`='NMD',
+                               upstream_gene_variant = 'flank',
+                               `5_prime_UTR_variant` = 'flank',
+                               frameshift_variant = 'truncating',
+                               frameshift_variant = 'truncating',
+                               inframe_deletion = 'inframe_indel',
+                               inframe_insertion = 'inframe_indel',
+                               intron_variant = 'silent',
+                               splice_region_variant = 'splice_region',
+                               coding_sequence_variant = 'missense',
+                               missense_variant = 'missense',
+                               stop_gained = 'truncating',
+                               stop_lost = 'truncating',
+                               stop_retained_variant = 'silent',
+                               synonymous_variant = 'silent',
+                               splice_acceptor_variant = 'splice',
+                               splice_donor_variant = 'splice',
+                               protein_altering_variant = 'inframe_indel',
+                               start_lost = 'truncating',
+                               `coding_sequence_variant,3_prime_UTR_variant`='flank',
+                               `coding_sequence_variant,5_prime_UTR_variant`='flank',
+                               `stop_gained,frameshift_variant` = 'truncating',
+                               `stop_gained,frameshift_variant,start_lost` = 'truncating',
+                               `missense_variant,splice_region_variant`='missense',
+                               `intron_variant,non_coding_transcript_variant`='silent',
+                               `intron_variant,NMD_transcript_variant`='NMD',
+                               `non_coding_transcript_exon_variant,non_coding_transcript_variant`='silent',
+                               `frameshift_variant,splice_region_variant`='truncating',
+                               `frameshift_variant,start_lost`='truncating',
+                               `frameshift_variant,stop_lost`='truncating',
+                               `inframe_deletion,splice_region_variant`='splice_region',
+                               `inframe_insertion,splice_region_variant`='splice_region',
+                               `frameshift_variant,stop_lost,splice_region_variant`='truncating',
+                               `frameshift_variant,stop_retained_variant`='inframe_indel',
+                               `protein_altering_variant,splice_region_variant`='inframe_indel',
+                               `splice_acceptor_variant,intron_variant`='splice',
+                               `splice_acceptor_variant,coding_sequence_variant`='splice',
+                               `splice_acceptor_variant,coding_sequence_variant,intron_variant`='splice',
+                               `splice_acceptor_variant,5_prime_UTR_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant,intron_variant`='splice',
+                               `splice_donor_variant,intron_variant`='splice',
+                               `splice_donor_variant,3_prime_UTR_variant,intron_variant`='splice',
+                               `splice_donor_variant,5_prime_UTR_variant`='splice',
+                               `splice_donor_variant,coding_sequence_variant,3_prime_UTR_variant`='splice',
+                               `splice_region_variant,5_prime_UTR_variant`='flank',
+                               `splice_region_variant,3_prime_UTR_variant`='flank',
+                               `splice_region_variant,intron_variant` = 'splice_region',
+                               `splice_region_variant,synonymous_variant`='silent',
+                               `splice_region_variant,stop_retained_variant`='silent',
+                               `start_lost,inframe_deletion`='truncating',
+                               `start_lost,splice_region_variant`='truncating',
+                               `stop_lost,inframe_deletion`='truncating',
+                               `stop_gained,protein_altering_variant`='truncating',
+                               `stop_gained,frameshift_variant,splice_region_variant`='truncating',
+                               `stop_gained,inframe_deletion`='truncating',
+                               `stop_gained,inframe_insertion`='truncating',
+                               `stop_gained,splice_region_variant`='truncating'))
+}
+if(0){
+  extract_norm_maf=function(.bp){
+    .colnames = c('Hugo_Symbol','Chromosome','Start_Position','End_Position','Reference_Allele','Tumor_Seq_Allele1',
+                  'Tumor_Seq_Allele2',"Match_Norm_Seq_Allele1","Match_Norm_Seq_Allele2",
+                  'Consequence','PolyPhen',"cDNA_position","CDS_position","Protein_position","FILTER",
+                  't_depth','t_ref_count','t_alt_count','n_depth','n_ref_count','n_alt_count','Transcript_ID')
+    .cols = .colnames %>>%
+    {setNames(c('c','c','d','d','c','c', 'c','c','c', 'c','c','c','c','c','c', 'i','i','i','i','i','i','c'), .)} %>>%
+    {do.call(readr::cols_only, as.list(.))}
+    strip_maf = function(infile) {
+      read_tsv(infile, comment='#', col_types=.cols) %>>%
+        classify_consequence()
+    }
+    #.bp is bodypart of it cancer
+    maf=read_tsv(paste('/Volumes/areca42Tb2/gdc/top_driver_gene/',.bp,'/gender_age.tsv',sep="")) %>>%
+      mutate(filename=paste('/Volumes/areca42Tb2/gdc/top_driver_gene/',.bp,"/maf/",patient_id,".maf",sep="")) %>>%
+      mutate(purrr::map(filename,~strip_maf(.))) %>>%
+      unnest() %>>%#(?.)%>>%
+      dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position,
+                    ref=Reference_Allele,t_allele1=Tumor_Seq_Allele1,t_allele2=Tumor_Seq_Allele2,
+                    n_allele1=Match_Norm_Seq_Allele1,n_allele2=Match_Norm_Seq_Allele2) %>>%
+      left_join(topdriver_bed%>>%dplyr::select(gene_symbol,strand)) %>>%filter(!is.na(strand)) %>>%
+      mutate(soma_or_germ=ifelse((t_allele1==n_allele1)&(t_allele2==n_allele2),"germline","somatic"),
+             t_genotype=ifelse(t_allele1==t_allele2,"homo","hetero"),
+             n_genotype=ifelse(n_allele1==n_allele2,"homo","hetero")) %>>%
+      mutate(LOH=ifelse((t_genotype=="homo")&(n_genotype=="hetero"),"LOH","no"))
+    
+  }
+  data.frame(body_part=c("breast","brain","lung","kidney","colorectal")) %>>%
+    mutate(purrr::map(body_part,~extract_norm_maf(.))) %>>%
+    unnest() %>>%
+    write_df("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/body_part_all.maf.gz")
+  
+  data.frame(cancer_type=c("hnsc","ov","prad","thca","ucec")) %>>%
+    mutate(purrr::map(cancer_type,~extract_norm_maf(.))) %>>%
+    unnest()%>>%
+    write_df("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/cancer_type_all.maf.gz")
+}
+
+body_part_maf=read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/body_part_all.maf.gz") %>>%
+#body_part_maf=read_tsv("/Volumes/areca42TB/tcga/all_patient/body_part_all.maf.gz") %>>%
+  filter(mutype!="flank",mutype!="splice_region") %>>%
+  filter(Consequence!="intron_variant") %>>%
+  filter(Consequence!="intron_variant,non_coding_transcript_variant") %>>%
+  dplyr::select(-filename) %>>%
+  left_join(all_patient_info %>>%dplyr::select(patient_id,cancer_type))
+
+cancer_type_maf=read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/cancer_type_all.maf.gz") %>>%
+#cancer_type_maf=read_tsv("/Volumes/areca42TB/tcga/all_patient/cancer_type_all.maf.gz") %>>%
+  filter(mutype!="flank",mutype!="splice_region") %>>%
+  filter(Consequence!="intron_variant") %>>%
+  filter(Consequence!="intron_variant,non_coding_transcript_variant") %>>%
+  dplyr::select(-filename) %>>%
+  mutate(cancer_type = toupper(cancer_type))
+
+norm_maf_all = rbind(body_part_maf%>>%select(-body_part),cancer_type_maf) %>>%
+  mutate(LOH=ifelse((soma_or_germ == "somatic" & LOH =="no" & ref != n_allele2),"back_mutation",LOH)) %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
+#  filter(cancer_type != "KICH",FILTER=="PASS")
+  filter(cancer_type != "KICH")
+rm(body_part_maf,cancer_type_maf)
+write_df(norm_maf_all,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/norm_maf_all.tsv.gz")
+######################################## read coverage files #####################################
+coverage_all_by_cancer_type =
+  read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/coverage_all.tsv.gz") %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
+  filter(cancer_type != "KICH") %>>%
+  group_by(cancer_type,chr,start) %>>%
+  summarise(an_white = sum(an_white), an_black = sum(an_black), an_other = sum(an_other)) %>>%ungroup()
+coverage_all = coverage_all_by_cancer_type %>>%
+  mutate(an_cancer = an_white + an_black + an_other) %>>%
+  group_by(chr,start) %>>%
+  summarise(an_cancer = sum(an_cancer))
+
+coverage_male_x_by_cancer_type =
+  read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/coverage_X_male.tsv.gz") %>>%
+  rename(an_white_male = an_white, an_black_male = an_black, an_other_male = an_other) %>>%
+  mutate(cancer_type = ifelse((cancer_type=="COAD" | cancer_type=="READ"),"CRC",cancer_type))%>>%
+  filter(cancer_type != "KICH") %>>%
+  group_by(cancer_type,chr,start) %>>%
+  summarise(an_white_male = sum(an_white_male),an_black_male = sum(an_black_male),
+            an_other_male = sum(an_other_male)) %>>%ungroup()
+coverage_male_x = coverage_male_x_by_cancer_type %>>%
+  mutate(an_male_cancer = an_white_male + an_black_male + an_other_male) %>>%
+  group_by(chr,start) %>>%
+  summarise(an_male_cancer = sum(an_male_cancer))
+
+tally_norm_maf = norm_maf_all%>>%
+  #filter(cancer_type != "KICH") %>>%
+  filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
+  tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
+  filter(ref != alt)%>>%
+  filter(!(chr=="chrX" & gender=="male" & allele=="n_allele1")) %>>%
+  mutate(homo=ifelse(n_genotype=="homo",ifelse(chr=="X" & gender=="male",0,1),0))%>>%
+  group_by(chr,start,end,ref,alt) %>>%
+  summarise(ac_cancer=n(),hom_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
+            Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
+            cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
+  ungroup() %>>%
+  left_join(coverage_all) %>>%left_join(coverage_male_x) %>>%
+  mutate(an_male_cancer = ifelse(is.na(an_male_cancer),0,an_male_cancer)) %>>%
+  mutate(an_cancer = an_cancer - an_male_cancer) %>>%dplyr::select(-an_male_cancer)
+write_df(tally_norm_maf,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/tally_norm_maf.tsv.gz")
+
+#### AF > 5% のsiteのcoverage(patientごと) #########
+## AF_mid_list.tsvはvarscan_maf_age_plot.Rにて作成
+mid_af_coverage =read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/AF_mid_coverage_by_patient.tsv.gz") %>>%
+  left_join(patient_list) %>>%
+  filter(!is.na(cancer_type),focal!="no") %>>%
+  dplyr::select(-focal)
+write_df(mid_af_coverage,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/mid_af_coverage.tsv.gz")
+
+####################################################################
+#pathogenic variantをもつ患者のlist
+patient_with_ps_ = read_tsv("/Volumes/areca42TB/tcga/burden_plot/cell2018/charger/tcga/tcga_all_variants_grch38_charger.tsv") %>>%
+  dplyr::rename(chr=Chromosome,start=Start,ref=Reference,alt=Alternate,gene_symbol=HUGO_Symbol,
+                clinvar=ClinVar_Pathogenicity, acmg=ACMG_Classification, charger=CharGer_Classification,
+                trait=ClinVar_Traits) %>>%
+  filter(clinvar=="Pathogenic"|charger=="Pathogenic"|charger=="Likely Pathogenic")%>>%
+  left_join(norm_maf_all) %>>%
+  dplyr::select(gene_symbol,cancer_type,patient_id)
+#write_df(patient_with_ps,"all_patient/pathogenic_site_list.tsv")
+#この中でsignificantなのは？
+patient_with_ps = tibble(cancer_type=c("BRCA", "OV",   "BRCA", "OV",   "KIRP","BRCA","LUAD","PRAD","KIRC","GBM",  "UCEC"),
+                         gene_symbol=c("BRCA1","BRCA1","BRCA2","BRCA2","MET", "ATM", "ATM", "ATM", "BAP1","AXIN2","PTEN")) %>>%
+  mutate(significance="significant") %>>%
+  right_join(patient_with_ps_) %>>%
+  count(cancer_type,significance,patient_id)%>>%
+  dplyr::select(-n)
+  
+write_df(patient_with_ps,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_with_ps.tsv")

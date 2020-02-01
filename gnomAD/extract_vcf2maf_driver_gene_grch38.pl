@@ -37,6 +37,27 @@ while(<ENST>){
 }
 close ENST;
 
+
+#read driver genes list
+my %top_driver_genes =();
+open(DG,"$ENV{HOME}/git/driver_genes/driver_genes.tsv") or die "ERROR::cannot open top driver genes file.\n";
+<DG>;
+while(<DG>){
+		chomp;
+		my @line = split(/\t/,);
+		$top_driver_genes{$line[0]}=$line[1]; #if ref>=4 top driver genes
+}
+close DG;
+open(CG,"/Volumes/areca42TB/GRCh38_singlefasta/control_genes.tsv") or die "ERROR::cannot open top driver genes file.\n";
+<CG>;
+while(<CG>){
+		chomp;
+		my @line = split(/\t/,);
+		$top_driver_genes{$line[0]}=0;
+}
+close CG;
+
+
 # Prioritize Sequence Ontology terms in order of severity, as estimated by Ensembl:
 # http://useast.ensembl.org/info/genome/variation/predicted_data.html#consequences
 sub GetEffectPriority {
@@ -109,23 +130,35 @@ foreach my $chr (@chr){
 		$pm->start and next;
 		&print_extracted_file("$chr");
 #fork end 
+		print "end chr$chr\n";
 		$pm->finish;
 }
 $pm->wait_all_children;
+
+open(TDG,">maf38/non_cancer_maf/non_cancer_top_driver_gene.maf");
+open(ODG,">maf38/non_cancer_maf/non_cancer_other_driver_gene.maf");
+open(CTG,">maf38/non_cancer_maf/non_cancer_control_gene.maf");
+foreach my $chr(@chr){
+		&pull_focal_site_from_maf($chr);
+}
+close TDG;
+close ODG;
+close CTG;
+
+
+
+
+
+
 exit;
 
 sub print_extracted_file( $ ){
 		my $chr = $_[0];
 		my $infile = "file_grch38/$gnomAD_version.$chr.liftover_grch38.vcf.bgz";
 		open(VCF,"gunzip -c $infile|");
-		open(ALL,"|gzip -c >maf38/all_maf/gnomAD_chr$chr.maf.gz");
-		open(CAN,"|gzip -c >maf38/non_cancer_maf/non_cancer_chr$chr.maf.gz");
-		open(CONT,"|gzip -c >maf38/control_maf/control_chr$chr.maf.gz");
-		print ALL "chr\tposi\tref\talt\tfilter\t". join("\t",@vep_focal) ."\t$ac_col\n";
+		open(CAN,"|gzip -c >maf38/non_cancer_maf/extract_driver/chr$chr.maf.gz") or die "ERROR::cannot open middle outfile\n";
 		print CAN "chr\tposi\tref\talt\tfilter\t". join("\t",@vep_focal) ."\t$ac_col\n";
-		print CONT "chr\tposi\tref\talt\tfilter\t". join("\t",@vep_focal) ."\t$ac_col\n";
 		my %vepcol=();
-		my $info_check=3;
 		while(<VCF>){
 				if($_ =~ /^#/){
 						if($_ =~ /^##INFO=<ID=vep/){
@@ -152,11 +185,6 @@ sub print_extracted_file( $ ){
 				}
 				my $outbase = "$line[0]\t$line[1]\t$line[3]\t$line[4]\t$line[6]$vepout";
 				my %info = &info2hash($line[7]);
-				my $allout ="";
-				foreach my $out_info (@ac_col){
-						$allout .= "\t$info{$out_info}";
-				}
-				print ALL "$outbase$allout\n";
 				if($info{non_cancer_AC}!=0){
 						my $noncanout ="";
 						foreach my $out_info(@ac_col){
@@ -165,19 +193,9 @@ sub print_extracted_file( $ ){
 						}
 						print CAN "$outbase$noncanout\n";
 				}
-				if($info{controls_AC}!=0){
-						my $contout ="";
-						foreach my $out_info(@ac_col){
-								my $out_info_co=$info{"controls_$out_info"};
-								$contout .= "\t$out_info_co";
-						}
-						print CONT "$outbase$contout\n";
-				}
 		}
 		close VCF;
-		close ALL;
 		close CAN;
-		close CONT;
 }
 
 
@@ -204,16 +222,22 @@ sub most_effect( $ $ ){
 		for(my $i=0;$i<scalar(@vep_text);$i++){
 				$vep_text[$i] =~ s/\&/,/g;
 				my @vep = split(/\|/,$vep_text[$i]);
+				if(!defined $top_driver_genes{$vep[$vepcol{SYMBOL}]}){next;}
 				if(($vep[$vepcol{IMPACT}] eq "MODIFIER") || ($vep[$vepcol{BIOTYPE}] ne "protein_coding")){next;}
 				my ($Consequence)=split(",",$vep[$vepcol{Consequence}]);
 				$all_vep{$i}{effect_prio}=&GetEffectPriority($Consequence);
 				$all_vep{$i}{length}=$transcript{$vep[$vepcol{Feature}]};
+				my $driver_rank=2;
+				if($top_driver_genes{$vep[$vepcol{SYMBOL}]}>3){$driver_rank=0;}
+				elsif($top_driver_genes{$vep[$vepcol{SYMBOL}]}==0){$driver_rank=1;}
+				$all_vep{$i}{driver_rank}=$driver_rank;
 		}
 		if(scalar(keys %all_vep) ==0){return("");
 		}else{
 				my @arranged_index = sort{
+						$all_vep{$a}{driver_rank} <=> $all_vep{$b}{driver_rank} ||
 						$all_vep{$a}{effect_prio} <=> $all_vep{$b}{effect_prio} ||
-						$all_vep{$a}{length} <=> $all_vep{$b}{length}
+						$all_vep{$b}{length} <=> $all_vep{$a}{length}
 				}keys %all_vep;
 				return($vep_text[$arranged_index[0]]);
 		}
@@ -249,7 +273,40 @@ sub info2hash( $ ){
 		return(%out);
 }
 		
+sub header2hash ( $ ){
+		my $header = $_[0];
+		my @colm = split(/\t/,$header);
+		my %out = ();
+		for(my $i=0; $i < @colm; $i++){
+				$out{$colm[$i]}=$i;
+		}
+		return(%out);
+}
 
+sub pull_focal_site_from_maf( $ ){
+		my $chr = $_[0];
+		my $maf_path="maf38/non_cancer_maf/extract_driver/chr";
+		open(MAF,"gunzip -c $maf_path$chr.maf.gz|") or die "ERROR::cannot open annotation_extract of chr$chr\n";
+		my $header = <MAF>;chomp$header;
+		my %col=&header2hash($header);
+		if($chr eq "1"){print TDG "$header\n";}
+		if($chr eq "1"){print ODG "$header\n";}
+		if($chr eq "1"){print CTG "$header\n";}
+		while(<MAF>){
+				chomp;
+				my @line = split(/\t/,);
+				my $gene = $line[$col{SYMBOL}];
+				if(!defined $top_driver_genes{$gene}){next;}
+				if($top_driver_genes{$gene} >=4){
+						print TDG "$_\n";
+				}elsif($top_driver_genes{$gene} >0){
+						print ODG "$_\n";
+				}else{
+						print CTG "$_\n";
+				}
+		}
+		close MAF;
+}
 
 
 
