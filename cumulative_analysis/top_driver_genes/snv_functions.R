@@ -1,10 +1,10 @@
 ###################################################################################################
 ##################################################################################################
 cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
-                           .MAF_start = 0,.mutype="missense",.role="TSG",
+                           .MAF_start = 0,.mutype="missense",.role="TSG",.blood=F,
                            .facet_by_cancer_type = F, .by_gene = F, .more_5par = F,.race="all_race",
                            .regression_size = 7,.pnum_size = 4,.save = T,.pathogenic = F,
-                           .patient_list=patient_list,.height=8,.width=8,
+                           .patient_list=patient_tdg,.height=8,.width=8,.reg_file="",
                            .permu=T,.test_tail="one",.permu_file=NA,.all_color="black"){
   #指数表記
   exponent_notation = function(.num){
@@ -23,12 +23,12 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
     }
     length(.tbl$regression) /10000
   }
+  .patient_list = .patient_list %>>%filter(!is.na(age))%>>%
+    dplyr::select(patient_id,cancer_type,age,race)
   if(.race!="all_race"){
-    .patient_list = .patient_list %>>%
-      left_join(patient_race) %>>%
-      filter(race==.race)%>>%
-      dplyr::select(-race)
+    .patient_list = .patient_list %>>%filter(race==.race)
   }
+  .maf = .maf%>>%filter(chr!="chrX",FILTER=="PASS")
   
   #患者ごとのtruncating な遺伝子の数
   .truncating_count = .maf %>>%
@@ -36,7 +36,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
     filter(mutype=="truncating"|mutype=="splice") %>>%
     filter(role==.role | role=="oncogene/TSG")%>>%
     count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
-    group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%
+    group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
     #0個の患者も入れる
     {left_join(.patient_list,.)}%>>%
     mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
@@ -130,14 +130,18 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
   }
   PG=""
   if(.pathogenic){PG="_pathogenic"}
+  BL=""
+  if(.blood){BL="_blood"}
   if(.save ){
     if(.facet_by_cancer_type){
       write_df(regression,paste0("age_plot/cumulative/",.role,"/",.race,
-                                 "/lm_",.mutype,.MAF_start,"-",.MAF_end,PG,"_byCT_regression.tsv"))
+                                 "/lm_",.mutype,.MAF_start,"-",.MAF_end,PG,BL,"_byCT_regression.tsv"))
     }else{
       write_df(regression,paste0("age_plot/cumulative/",.role,"/",.race,
-                                 "/lm_",.mutype,.MAF_start,"-",.MAF_end,PG,"_regression.tsv"))
+                                 "/lm_",.mutype,.MAF_start,"-",.MAF_end,PG,BL,"_regression.tsv"))
     }
+  }else if(.reg_file != ""){
+    write_df(regression,paste0("age_plot/cumulative/",.reg_file))
   }
   legendx3=function(.legend){
     .legend = as.numeric(ifelse(.legend=="10-",10,.legend))
@@ -145,10 +149,16 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
     as.character(ifelse(.legend==30,"30-",.legend))
   }
   regression=regression %>>%(?.)%>>%
-    mutate(out_reg=paste0("R=",signif(missense_num,2),", P",
-                          ifelse(p_value==0,"<0.0001",paste0("=",signif(p_value,2)))))
+    mutate(out_reg=ifelse(missense_num==0,"",
+                          paste0("R=",signif(missense_num,2),", P",
+                          ifelse(p_value==0,"<0.0001",paste0("=",signif(p_value,2))))),
+           abintercept=X.Intercept.-missense_num,
+           abslope=ifelse(.more_5par,missense_num*3,missense_num))
   #violin plot する際変異の最大数までに間が空いてしまう時に空の行を挿入するfunction
   missense_filling = function(.missense_count){
+    .missense_count = missense_count %>>%
+      dplyr::select(patient_id,cancer_type,age,race,missense_num,missense_count_n,
+                    missense_count_order,significance,truncating_count_n)
     .max_count=max(.missense_count$missense_num)
     .max_count=ifelse(.max_count>9,9,.max_count)
     .outcome = data.frame(missense_num=1:.max_count) %>>%
@@ -157,7 +167,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
     if(length(.outcome$missense_num) != 0){
       .outcome = .outcome %>>%
         mutate(missense_count_n = as.character(missense_num),
-               missense_count_order = missense_num,gender="male",
+               missense_count_order = missense_num,race="no",
                age=-50, cancer_type="BRCA", patient_id="no_patient", truncating_count_n=0,
                significance=NA)
       return(rbind(.missense_count,.outcome))
@@ -167,16 +177,16 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
   .p_posi=.max_count/2 +1
   .coef_posi=.max_count +1
   ##バイオリンプロットで見やすく
-  .plot = missense_count %>>%missense_filling()%>>%
+  .plot = missense_count %>>%missense_filling()%>>%(?.%>>%count(missense_num))%>>%
     mutate(cancer_type = ifelse(rep(.facet_by_cancer_type,length(cancer_type)), cancer_type,"All Cancer Types"))%>>%
     ggplot(aes(x=reorder(missense_count_n,missense_count_order), y=age))+
     geom_violin(scale = "count",colour=.all_color)+
     #geom_boxplot(width=.3,fill="black")+ 
     stat_summary(fun.y=mean,geom = "point", fill=.all_color,colour=.all_color,shape=21,size=2)+
     geom_abline(data = regression %>>%filter(p_value >= 0.05),
-                aes(intercept = X.Intercept.,slope = missense_num),linetype="dashed",colour=.all_color)+
+                aes(intercept = abintercept,slope = abslope),linetype="dashed",colour=.all_color)+
     geom_abline(data = regression %>>%filter(p_value < 0.05),
-                aes(intercept = X.Intercept.,slope = missense_num),colour=.all_color)+
+                aes(intercept = abintercept,slope = abslope),colour=.all_color)+
     scale_y_continuous(breaks = c(0,20,40,60,80),limits = c(0,90))+
     ggtitle(if(.MAF_start==0){paste0("MAF < ",.MAF_end," %")
     }else{paste0("MAF = ",.MAF_start," ~ ",.MAF_end," %")})+
@@ -194,7 +204,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
                 size=.regression_size,hjust=1,colour=.all_color)+
       geom_text(data =missense_count %>>%count(cancer_type,missense_count_n),
                 aes(x=missense_count_n,y=5,label=n)
-                ,size=.pnum_size,position="stack",angle=-45,colour=.all_color)+
+                ,size=.pnum_size,position="stack", angle=45,hjust=0,colour=.all_color)+
       theme(axis.text = element_text(size=10), strip.text = element_text(size=12),
             strip.background = element_rect(fill="transparent", colour = "black"))
   }else{     #全cancer_type
@@ -216,17 +226,17 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
     .plot = .plot+xlab(paste0("Number of Gene having ",.ns," Variants"))+
       theme(axis.title = element_text(size=20))
   }else{
-    .plot = .plot+xlab(paste0("Number of ", .ns, " Variants"))
+    .plot = .plot+xlab(paste0("Number of ", .ns, " Variants in ",.role))
   }
   .plot = .plot+ylab("Age at Diagnosis")+guides(colour=F)
   if(!.title){.plot = .plot+ggtitle(label = NULL)}
   plot(.plot)
   if(.save){
     if(.facet_by_cancer_type){
-      ggsave(paste0("age_plot/cumulative/",.role,"/",.race,"/",.mutype,.MAF_start,"-",.MAF_end,PG,"_byCT.pdf"),
+      ggsave(paste0("age_plot/cumulative/",.role,"/",.race,"/",.mutype,.MAF_start,"-",.MAF_end,PG,BL,"_byCT.pdf"),
              .plot,height = .height,width = .width)
     }else{
-      ggsave(paste0("age_plot/cumulative/",.role,"/",.race,"/",.mutype,.MAF_start,"-",.MAF_end,PG,".pdf"),
+      ggsave(paste0("age_plot/cumulative/",.role,"/",.race,"/",.mutype,.MAF_start,"-",.MAF_end,PG,BL,".pdf"),
              .plot,height = .height,width = .width)
     }
   }
@@ -241,7 +251,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
 make_regression_tabel = function(.maf=all_maf_for_cumulative,.vcf=tdg_gnomad,.race="all",.role = "TSG",
                                  .fdr=0.01,.mutype="missense",.max_maf=50,.maf_filter=F,
                                  .database="all",.duplicate=T,.somatic=T,.varscan=T,.pathogenic = F,
-                                 .patient_list = patient_list,.remove0=F){
+                                 .patient_list = patient_tdg,.remove0=F){
   regression_out = function(.class,.maf,.role,.patient_list){
     if((.class*10000) %% 100 == 0){print(paste0("doing MAF=",.class*100))}
     ##missense の数
@@ -258,14 +268,13 @@ make_regression_tabel = function(.maf=all_maf_for_cumulative,.vcf=tdg_gnomad,.ra
                               summary(lm)$fstatistic["dendf"]))
   }
   if((.race=="all")&(substitute(.vcf)=="tdg_gnomad")){
-    dplyr::select(patient_id,age)
+    .patient_list=.patient_list%>>%dplyr::select(patient_id,age)%>>%filter(!is.na(age))
     .vcf = .vcf %>>%
       dplyr::select(chr,start,ref,alt,AF)
   }
   if(.race!="all"){
     .patient_list = .patient_list %>>%
-      left_join(patient_race) %>>%
-      filter(race==.race)%>>%
+      filter(race==.race,!is.na(age))%>>%
       dplyr::select(patient_id,age)
     if(.race == "white"){
       .vcf = .vcf %>>%
@@ -285,7 +294,7 @@ make_regression_tabel = function(.maf=all_maf_for_cumulative,.vcf=tdg_gnomad,.ra
     filter(mutype=="truncating"|mutype=="splice") %>>%
     filter(role==.role | role=="oncogene/TSG")%>>%
     count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
-    group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%
+    group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
     {left_join(.patient_list,.)}%>>%
     mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n)) %>>%
     left_join(patient_with_ps,by=c("cancer_type","patient_id")) %>>%

@@ -15,14 +15,11 @@ write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append
                      append=append, quote=FALSE, sep=delim, na=na,
                      row.names=FALSE, col.names=col_names)
 }
-options(scipen=1)
+options(scipen=100)
 
-driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
-  filter(refs>3) %>>%dplyr::rename(gene_symbol=gene)%>>%
-  mutate(role=ifelse(is.na(role),"TSG",role))%>>%
-  dplyr::select(gene_symbol,role)
+driver_genes=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/driver_genes.tsv")
 patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
-patient_race = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_race.tsv")
+patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv")
 patient_with_ps = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_with_ps.tsv")
 
 ################ read MAF extracted ################
@@ -30,7 +27,8 @@ all_maf_for_cumulative = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gen
   filter(chr!="chrX",FILTER=="PASS")
 white_maf_for_cumulative = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/white_maf_for_cumulative.tsv.gz")%>>%
   filter(chr!="chrX",FILTER=="PASS")
-tdg_gnomad = read_tsv("/Volumes/DR8TB2/gnomAD/maf38/non_cancer_maf/non_cancer_top_driver_gene.maf",col_types=cols(chr="c"))%>>%
+tdg_gnomad = read_tsv("/Volumes/DR8TB2/gnomAD/maf38/non_cancer_maf/non_cancer_top_driver_gene.maf",
+                      col_types=cols(chr="c",LoF_filter="c"))%>>%
   mutate(AF=AC/AN,AF_white=(AC_fin+AC_nfe+AC_asj)/(AN_fin+AN_nfe+AN_asj),AF_black=AC_afr/AN_afr) %>>%
   dplyr::select(chr,posi,ref,alt,filter,SYMBOL,AC,AN,nhomalt,AF,AF_white,AF_black) %>>%
   dplyr::rename(gene_symbol =SYMBOL,start = posi)
@@ -91,12 +89,11 @@ lm10=read_tsv("age_plot/cumulative/TSG/white/lm_missense0-10_regression.tsv")%>>
 #reg_plot logで
 .plot_reglog = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
 .plot = cowplot::ggdraw()+
-  cowplot::draw_plot(.plot005 + theme(axis.title.x = element_text(size =15),
-                                      axis.title.y = element_text(size =15))+
+  cowplot::draw_plot(.plot005 + theme(axis.title.y = element_text(size =15),axis.title.x = element_blank())+
                        ggtitle(label = NULL),
-                     x=0,y=0.35,width=0.36,height=0.65)+
+                     x=0,y=0.38,width=0.36,height=0.62)+
   cowplot::draw_plot(.plot005_by + theme(axis.title.y = element_blank(),
-                                         axis.title.x = element_text(size = 15))+
+                                         strip.text = element_text(size=8,margin=margin(1,0,1,0)))+
                        ggtitle(label = NULL),
                      x=0.36,y=0,width=0.64,height=1)+
   cowplot::draw_plot(.plot_reglog,x=0,y=0,width=0.36,height=0.35)+
@@ -156,12 +153,11 @@ lm10=read_tsv("age_plot/cumulative/TSG/white/lm_missense0-10_pathogenic_regressi
 #reg_plot logで
 .plot_reglog = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
 .plot = cowplot::ggdraw()+
-  cowplot::draw_plot(.plot005 + theme(axis.title.x = element_text(size =15),
-                                      axis.title.y = element_text(size =15))+
+  cowplot::draw_plot(.plot005 + theme(axis.title.y = element_text(size =15),axis.title.x = element_blank())+
                        ggtitle(label = NULL),
-                     x=0,y=0.35,width=0.36,height=0.65)+
+                     x=0,y=0.38,width=0.36,height=0.62)+
   cowplot::draw_plot(.plot005_by + theme(axis.title.y = element_blank(),
-                                         axis.title.x = element_text(size = 15))+
+                                         strip.text = element_text(size=8,margin=margin(1,0,1,0)))+
                        ggtitle(label = NULL),
                      x=0.36,y=0,width=0.64,height=1)+
   cowplot::draw_plot(.plot_reglog,x=0,y=0,width=0.36,height=0.35)+
@@ -198,40 +194,38 @@ cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.mutype = "silent
 
 
 ##### 0.01%ごとのplot
-if(0){
+if(1){
   regression_table = make_regression_tabel(.maf=white_maf_for_cumulative,.mutype = "silent",.max_maf = 50,.race="white")
-  regression_table_ = make_regression_tabel(.mutype = "silent",.max_maf = 50,.race="white")
   write_df(regression_table,"age_plot/cumulative/regression/TSG_syn_white.tsv")
 }
 regression_table=read_tsv("age_plot/cumulative/regression/TSG_syn_white.tsv")
 .plot_reg=regression_plot_byside(regression_table,.blue = 1,.green = 10)
-.plot_reg=regression_plot_byside(regression_table_,.blue = 1,.green = 10)
+#.plot_reg=regression_plot_byside(regression_table_,.blue = 1,.green = 10)
 ggsave("age_plot/fig/regression/TSG_syn_byside_white.pdf",.plot_reg,height = 6,width = 12)
 
 ##########################################################################################################
 ###################################### figrure用に調整 #######################################
-lm1=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-1_regression.tsv")%>>%
+lm1=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-1_regression.tsv") %>>%
   mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
-lm10=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-10_regression.tsv")%>>%
+lm10=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-10_regression.tsv") %>>%
   mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
 .plot005=cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.race = "white",
                          .permu_file = "TSG/silent_005_white.tsv",.all_color = "darkred",.save = F,
                          .regression_size = 5,.pnum_size = 3,.mutype = "silent")+
   geom_abline(aes(intercept=lm1$X.Intercept.,slope=lm1$missense_num),colour="blue",linetype=lm1$LT)+
   geom_abline(aes(intercept=lm10$X.Intercept.,slope=lm10$missense_num),colour="green",linetype=lm10$LT)
-.plot005_by =cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,
+.plot005_by =cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.mutype = "silent",
                              .facet_by_cancer_type = T,.race = "white",
                              .pnum_size = 2.5,.regression_size = 3.5,.width = 12,.save = F,
                              .permu_file = "TSG/silent_005_byCT_white.tsv",.all_color = "darkred")
 #reg_plot logで
 .plot_reglog = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
 .plot = cowplot::ggdraw()+
-  cowplot::draw_plot(.plot005 + theme(axis.title.x = element_text(size =15),
-                                      axis.title.y = element_text(size =15))+
+  cowplot::draw_plot(.plot005 + theme(axis.title.y = element_text(size =15),axis.title.x = element_blank())+
                        ggtitle(label = NULL),
-                     x=0,y=0.35,width=0.36,height=0.65)+
+                     x=0,y=0.38,width=0.36,height=0.62)+
   cowplot::draw_plot(.plot005_by + theme(axis.title.y = element_blank(),
-                                         axis.title.x = element_text(size = 15))+
+                                         strip.text = element_text(size=8,margin=margin(1,0,1,0)))+
                        ggtitle(label = NULL),
                      x=0.36,y=0,width=0.64,height=1)+
   cowplot::draw_plot(.plot_reglog,x=0,y=0,width=0.36,height=0.35)+
@@ -241,123 +235,122 @@ lm10=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-10_regression.tsv")%>>%
 .plot
 ggsave("age_plot/fig/poster_fig/maf005_syn_with_logreg_white.pdf",.plot,width = 14,height = 8)
 
+#########################################################################################################################
+lm1=read_tsv("age_plot/cumulative/TSG/white/lm_missense0-1_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10=read_tsv("age_plot/cumulative/TSG/white/lm_missense0-10_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plot005=cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.race = "white",
+                         .permu_file = "TSG/missense_005_white.tsv",.all_color = "darkred",.save = F,
+                         .regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1$X.Intercept.,slope=lm1$missense_num),colour="blue",linetype=lm1$LT)+
+  geom_abline(aes(intercept=lm10$X.Intercept.,slope=lm10$missense_num),colour="green",linetype=lm10$LT)
+lm1s=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-1_regression.tsv") %>>%
+  mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10s=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-10_regression.tsv") %>>%
+  mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plots005=cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.race = "white",
+                         .permu_file = "TSG/silent_005_white.tsv",.all_color = "darkred",.save = F,
+                         .regression_size = 5,.pnum_size = 3,.mutype = "silent")+
+  geom_abline(aes(intercept=lm1s$X.Intercept.,slope=lm1s$missense_num),colour="blue",linetype=lm1s$LT)+
+  geom_abline(aes(intercept=lm10s$X.Intercept.,slope=lm10s$missense_num),colour="green",linetype=lm10s$LT)
 
-##############################################################################################
-#どの遺伝子が1番効いてる？
-get_lm_coef = function(.tbl){
-  if(first(.tbl$focal =="yes")){
-    .patient_count = left_join(patient_list,.tbl, by = "patient_id") %>>%
-      mutate(missense_num = ifelse(is.na(missense_num),0,missense_num),
-             age=signif(age/365.25,4))
-    model=lm(age ~ missense_num, data = .patient_count)
-    as.data.frame(as.list(coef(model))) %>>%
-      mutate(lm_p_value = 1 - pf(summary(model)$fstatistic["value"],summary(model)$fstatistic["numdf"],
-                                 summary(model)$fstatistic["dendf"]),
-             t_test_p_value = t.test(.patient_count[.patient_count$missense_num > 0,]$age/365.25,
-                                     .patient_count[.patient_count$missense_num ==0,]$age/365.25,
-                                     alternative= "less")$p.value,
-             all_missense_num = sum(.patient_count$missense_num))
-  }else{
-    data.frame(X.Intercept.=NA,missense_num=NA,lm_p_value=NA,t_test_p_value=NA,
-               all_missense_num=sum(.tbl$missense_num,na.rm = T))
-  }
+regression_table=read_tsv("age_plot/cumulative/regression/TSG_nonsyn_white.tsv")
+regression_table_silent=read_tsv("age_plot/cumulative/regression/TSG_syn_white.tsv")
+.plot_reg = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
+.plots_reg  = regression_plot_log(regression_table_silent,.dred=0.05,.blue=1,.green = 10)
+.plot = cowplot::plot_grid(.plot005,.plots005+theme(axis.title.y = element_blank()),
+                           .plot_reg,.plots_reg+theme(axis.title.y = element_blank()),
+                           rel_heights = c(13,7),scale = 0.95,
+                           labels = "auto",label_size = 20,ncol = 2)
+.plot
+ggsave("age_plot/fig/poster_fig/ns_reg_and_violin_white.pdf",.plot,width = 12,height = 8)
+
+#########################################################################################################################
+######################################### MAF defined by gnomAD all race MAF ############################################
+#########################################################################################################################
+cumulative_plot(.MAF_end = 0.05,.race="white",.save = F,
+                .permu_file = "TSG/missense_005_white_mafall.tsv",.regression_size = 5,.pnum_size = 3)
+
+cumulative_plot(.MAF_end = 1,.race="white",.save = F,.reg_file = "TSG/white/lm_missense0-1_mafall_regression.tsv",
+                .permu_file = "TSG/missense_1_white_mafall.tsv")
+
+cumulative_plot(.MAF_end = 10,.race="white",.save = F,.reg_file = "TSG/white/lm_missense0-10_mafall_regression.tsv",
+                .permu_file = "TSG/missense_10_white_mafall.tsv")
+
+##### 0.01%ごとのplot
+if(0){
+  regression_table = make_regression_tabel(.max_maf = 50,.race="white")
+  write_df(regression_table,"age_plot/cumulative/regression/TSG_nonsyn_white_mafall.tsv")
 }
-driver_genes %>>%dplyr::select(gene,role) %>>%dplyr::rename(gene_symbol=gene) %>>%
-  filter((role=="TSG"|role=="oncogene/TSG"),gene_symbol!="KMT2C") %>>%
-  left_join(all_maf_for_cumlative %>>%filter(MAF<0.005)%>>%
-              group_by(gene_symbol,patient_id) %>>% summarise(missense_num=sum(MAC))) %>>%
-  mutate(focal = ifelse(is.na(patient_id),"no","yes")) %>>%
-  nest(-gene_symbol,-role) %>>%
-  mutate(regression =purrr::map(data, ~get_lm_coef(.))) %>>%
-  dplyr::select(-role,-data) %>>%unnest() %>>%
-  arrange(missense_num) %>>%
-  write_df("~/Dropbox/install/tvz/TSG_by_gene_regression_coef.tsv")
-
-
-#################################################################################################################
-################################################## oncogene #####################################################
-#################################################################################################################
-####### missense ########
-cumulative_plot(.MAF_end = 0.05,.path = "onco",.role = "oncogene",
-                .permu_file = "oncogene/missense005.tsv",.test_tail = "two")
-
-####### missense by cancer type ########
-cumulative_plot(.MAF_end = 0.05,.path = "onco/by_cancer_type",
-                .role = "oncogene",.facet_by_cancer_type = T,
-                .pnum_size = 2.5,.regression_size = 3.5,.width = 12,
-                .permu_file = )
-cumulative_plot(.MAF_end = 3,.path = "onco/by_cancer_type",
-                .role = "oncogene",.facet_by_cancer_type = T,
-                .pnum_size = 2.5,.regression_size = 3.5,.width = 12,
-                .permu_file = )
-
-##################################################################
-regression_table_onco = make_regression_tabel(.maf=white_maf_for_cumulative,
-                                              .role = "oncogene",.max_maf = 50)
-write_df(regression_table_onco,"age_plot/cumulative/regression/onco_nonsyn.tsv")
-regression_table_onco = read_tsv("age_plot/cumulative/regression/onco_nonsyn.tsv")
-###################################### figrure用に調整 #######################################
-# .plot_reg = cowplot::ggdraw()+
-#   cowplot::draw_plot(.plot_reg10 + theme(axis.title = element_blank())+
-#                        annotate("rect",xmin=0,xmax=1,ymin=-0.098,ymax=0.28,alpha=0.2)+
-#                        scale_y_continuous(limits = c(-0.098,0.28),expand = c(0,0)),
-#                      x=0.05, y=0.53, width = 0.9, height = 0.47)+
-#   cowplot::draw_plot(.plot_reg1  + theme(axis.title.y = element_blank()),
-#                      x=0.05, y=0   , width = 0.9, height = 0.53)+
-#   cowplot::draw_text("regression coefficient",size = 15, x=0.025, y=0.5, angle=90)
-# 
-# .plot25  = cumulative_plot(.MAF_end = 2.5, .role = "oncogene",
-#                             .save = F,.regression_size = 5,.pnum_size = 3)
-# .plot005 = cumulative_plot(.MAF_end = 0.05, .role = "oncogene",
-#                             .save = F,.regression_size = 5,.pnum_size = 3)
-# .plot = cowplot::plot_grid(.plot_reg,
-#                             cowplot::plot_grid(.plot005 + theme(axis.title.x = element_blank(),
-#                                                                  axis.title.y = element_text(size = 15),
-#                                                                  axis.text = element_text(size = 12),
-#                                                                  title = element_text(size = 20)),
-#                                                .plot25 + theme(title = element_text(size = 20),
-#                                                                 axis.title = element_text(size = 15),
-#                                                                 axis.text = element_text(size = 12)),
-#                                                labels = c("b","c"),label_size = 30,
-#                                                ncol = 1,rel_heights = c(1,1.1)),
-#                             labels = c("a",""),ncol=2,rel_widths = c(1.5,1),label_size = 30)
-# .plot
-# ggsave("age_plot/fig/presentation/oncogene_nonsyn_reg_and_violin.pdf",.plot,width = 15,height =7 )
-
-
-###############################################################################
 #silent
-cumulative_plot(.MAF_end = 0.05,.path = "oncogene/all_race",.role = "oncogene",.mutype = "silent",
-                .permu_file = "oncogene/silent005.tsv")
-regression_table_silent_onco = make_regression_tabel(.maf=white_maf_for_cumulative,
-                                                     .mutype = "silent",.role = "oncogene",.max_maf = 50)
-write_df(regression_table_silent_onco,"age_plot/cumulative/regression/onco_syn.tsv")
-regression_table_silent_onco = read_tsv("age_plot/cumulative/regression/onco_syn.tsv")
-###################################### figrure用に調整 #######################################
-# .plots_reg = cowplot::ggdraw()+
-#   cowplot::draw_plot(.plots_reg10 + theme(axis.title = element_blank())+
-#                        annotate("rect",xmin=0,xmax=1,ymin=-0.37,ymax=0.02,alpha=0.2)+
-#                        scale_y_continuous(limits = c(-0.37,0.02),expand = c(0,0)),
-#                      x=0.05, y=0.53, width = 0.9, height = 0.47)+
-#   cowplot::draw_plot(.plots_reg1  + theme(axis.title.y = element_blank())+
-#                        scale_y_continuous(breaks = c(-0.3,-0.2,-0.1),labels = c(-0.3,-0.2,-0.1)),
-#                      x=0.05, y=0   , width = 0.9, height = 0.53)+
-#   cowplot::draw_text("regression coefficient",size = 15, x=0.025, y=0.5, angle=90)
-# 
-# .plots002  = cumulative_plot(.MAF_end = 0.02, .mutype = "silent",.role = "oncogene",
-#                             .save = F,.regression_size = 5,.pnum_size = 3)
-# .plots005 = cumulative_plot(.MAF_end = 0.05, .mutype = "silent",.role = "oncogene",
-#                             .save = F,.regression_size = 5,.pnum_size = 3)
-# .plots = cowplot::plot_grid(.plots_reg,
-#                             cowplot::plot_grid(.plots002 + theme(axis.title.x = element_blank(),
-#                                                                  axis.title.y = element_text(size = 15),
-#                                                                  axis.text = element_text(size = 12),
-#                                                                  title = element_text(size = 20)),
-#                                                .plots005 + theme(title = element_text(size = 20),
-#                                                                 axis.title = element_text(size = 15),
-#                                                                 axis.text = element_text(size = 12)),
-#                                                labels = c("b","c"),label_size = 30,
-#                                                ncol = 1,rel_heights = c(1,1.1)),
-#                             labels = c("a",""),ncol=2,rel_widths = c(1.5,1),label_size = 30)
-# .plots
-# ggsave("age_plot/fig/presentation/oncogene_syn_reg_and_violin.pdf",.plots,width = 15,height =7 )
+cumulative_plot(.MAF_end = 0.05,.race="white",.mutype = "silent",.save = F,
+                .permu_file = "TSG/silent_005_white_mafall.tsv",.regression_size = 5,.pnum_size = 3)
+
+cumulative_plot(.MAF_end = 1,.race="white",.mutype = "silent",.save = F,
+                .reg_file = "TSG/white/lm_silent0-1_mafall_regression.tsv",
+                .permu_file = "TSG/silent_1_white_mafall.tsv")
+
+cumulative_plot(.MAF_end = 10,.race="white",.mutype = "silent",.save = F,
+                .reg_file = "TSG/white/lm_silent0-10_mafall_regression.tsv",
+                .permu_file = "TSG/silent_10_white_mafall.tsv")
+if(0){
+  regression_table = make_regression_tabel(.mutype = "silent",.max_maf = 50,.race="white")
+  write_df(regression_table,"age_plot/cumulative/regression/TSG_syn_white_mafall.tsv")
+}
+
+lm1=read_tsv("age_plot/cumulative/TSG/white/lm_missense0-1_mafall_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10=read_tsv("age_plot/cumulative/TSG/white/lm_missense0-10_mafall_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plot005=cumulative_plot(.MAF_end = 0.05,.race = "white",
+                         .permu_file = "TSG/missense_005_white_mafall.tsv",.all_color = "darkred",.save = F,
+                         .regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1$X.Intercept.,slope=lm1$missense_num),colour="blue",linetype=lm1$LT)+
+  geom_abline(aes(intercept=lm10$X.Intercept.,slope=lm10$missense_num),colour="green",linetype=lm10$LT)
+lm1s=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-1_mafall_regression.tsv") %>>%
+  mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10s=read_tsv("age_plot/cumulative/TSG/white/lm_silent0-10_mafall_regression.tsv") %>>%
+  mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plots005=cumulative_plot(.MAF_end = 0.05,.race = "white",.mutype = "silent",
+                          .permu_file = "TSG/silent_005_white_mafall.tsv",.all_color = "darkred",.save = F,
+                          .regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1s$X.Intercept.,slope=lm1s$missense_num),colour="blue",linetype=lm1s$LT)+
+  geom_abline(aes(intercept=lm10s$X.Intercept.,slope=lm10s$missense_num),colour="green",linetype=lm10s$LT)
+
+regression_table=read_tsv("age_plot/cumulative/regression/TSG_nonsyn_white_mafall.tsv")
+regression_table_silent=read_tsv("age_plot/cumulative/regression/TSG_syn_white_mafall.tsv")
+.plot_reg = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
+.plots_reg  = regression_plot_log(regression_table_silent,.dred=0.05,.blue=1,.green = 10)
+.plot = cowplot::plot_grid(.plot005,.plots005+theme(axis.title.y = element_blank()),
+                           .plot_reg,.plots_reg+theme(axis.title.y = element_blank()),
+                           rel_heights = c(13,7),scale = 0.95,
+                           labels = "auto",label_size = 20,ncol = 2)
+.plot
+ggsave("age_plot/fig/poster_fig/ns_reg_and_violin_white_mafall.pdf",.plot,width = 12,height = 8)
+
+
+
+#########################################################################################################################
+#################################### synonymous MAF defined by cancer population ########################################
+#########################################################################################################################
+if(0){
+coverage = read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/site_coverage_all.tsv")
+#already checked refminor in cancer is same in gnomAD
+cancer_MAF_white = white_maf_for_cumulative %>>%
+  filter(mutype=="silent")%>>%
+  left_join(driver_genes %>>%dplyr::select(gene_symbol,role), by = "gene_symbol") %>>%
+  filter(role=="TSG" | role=="oncogene/TSG")%>>%
+  group_by(chr,start,ref,alt)%>>%summarise(MAC=sum(MAC))%>>%
+  left_join(coverage)%>>%
+  mutate(MAF=MAC/an_white)%>>%
+  dplyr::select(chr,start,ref,alt,MAF)
+white_maf_for_cumulative_canMAF = white_maf_for_cumulative %>>%
+  dplyr::select(-MAF)%>>%left_join(cancer_MAF_white)
+
+#-------------------------------------------------------------------------------------------------------#
+cumulative_plot(.maf= white_maf_for_cumulative_canMAF,.MAF_end = 0.05,.race="white",.mutype = "silent",.save=F,
+                .permu_file = "TSG/silent_005_white_canMAF.tsv",.regression_size = 5,.pnum_size = 3)
+##X.intercept =60.23238,R=0.1037643,P=0.6142
+if(0){
+  regression_table = make_regression_tabel(.maf=white_maf_for_cumulative_canMAF,.mutype = "silent",.max_maf = 50,.race="white")
+  write_df(regression_table,"age_plot/cumulative/regression/TSG_syn_white_canMAF.tsv")
+}
+.plot_reg=regression_plot_byside(regression_table,.blue = 1,.green = 10)
+}

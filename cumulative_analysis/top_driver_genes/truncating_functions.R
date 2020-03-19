@@ -1,14 +1,16 @@
 #####################################################################################################################
 #violin plot する際変異の最大数までに間が空いてしまう時に空の行を挿入するfunction
 truncating_filling = function(.truncating_count){
+  .truncating_count = .truncating_count %>>%
+    dplyr::select(patient_id,cancer_type,age,truncating_count_n)
   .max_count=max(.truncating_count$truncating_count_n)
-  .outcome = data.frame(truncating_count_n=1:.max_count) %>>%
+  .outcome = tibble(truncating_count_n=0:.max_count) %>>%
     left_join(.truncating_count%>>%count(truncating_count_n)) %>>%
     filter(is.na(n)) %>>%dplyr::select(-n)
   if(length(.outcome$truncating_count_n) != 0){
     .outcome = .outcome %>>%
-      mutate(age=-50, cancer_type="BRCA", patient_id="no_patient",gender="male")
-    return(rbind(.truncating_count,.outcome))
+      mutate(age=-50, cancer_type="BRCA", patient_id="no_patient")
+    return(bind_rows(.truncating_count,.outcome))
   }else{return(.truncating_count)}
 }
 #指数表記
@@ -31,6 +33,7 @@ perm_pvalue = function(.regression,.CT=NA,.tbl,.tail){
 }
 
 truncate_plot_allcantype= function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.permu_file=NA){
+  .tbl=.tbl%>>%filter(!is.na(age))
   .max_count=max(.tbl$truncating_count_n)
   .coef_posi=ifelse(.max_count==1,2.25,ifelse(.max_count==2,3,.max_count))
   lm=lm(age ~ truncating_count_n, data=.tbl)
@@ -63,7 +66,8 @@ truncate_plot_allcantype= function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
       mutate(out_reg =paste0("R=",signif(truncating_count_n,2)," P",
                              ifelse(p_value==0,"<0.0001",paste0("=",signif(p_value,2)))))
   }
-  .plot = .tbl %>>%truncating_filling()%>>%
+  regression=regression%>>%mutate(abintercept=X.Intercept.-truncating_count_n)
+  .plot = .tbl %>>%truncating_filling()%>>%(?.)%>>%
     mutate(cancer_type ="All Cancer Types") %>>%
     ggplot(aes(x=as.factor(truncating_count_n), y=age))+
     geom_violin(scale = "count")+
@@ -73,9 +77,9 @@ truncate_plot_allcantype= function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
     geom_text(data =.tbl %>>%count(truncating_count_n),
               aes(x=as.factor(truncating_count_n),y=5,label=n),size=3,position="stack")+
     geom_abline(data = regression %>>%filter(p_value > 0.05),
-                aes(intercept = X.Intercept.,slope = truncating_count_n),linetype="dashed")+
+                aes(intercept = abintercept,slope = truncating_count_n),linetype="dashed")+
     geom_abline(data = regression %>>%filter(p_value <= 0.05),
-                aes(intercept = X.Intercept.,slope = truncating_count_n))+
+                aes(intercept = abintercept,slope = truncating_count_n))+
     geom_text(data = regression, aes(x=.coef_posi,y=10,label=out_reg),size=5,hjust=1)+
     facet_wrap( ~ cancer_type)+
     xlab("Number of Truncated Gene")+ylab("Age at Diagnosis")+
@@ -87,8 +91,10 @@ truncate_plot_allcantype= function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
   plot(.plot)
   return(.plot)
 }
+
 ##############################################################################################
 truncate_plot_bycantype = function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.permu_file=NA){
+  .tbl=.tbl%>>%filter(!is.na(age))
   .max_count=max(.tbl$truncating_count_n)
   .coef_posi=ifelse(.max_count == 1,2.4,.max_count+1)
   lm_p=function(.data,.permu){
@@ -129,9 +135,11 @@ truncate_plot_bycantype = function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
       mutate(p_value = pmap_dbl(.,function(cancer_type,truncating_count_n,...){
         perm_pvalue(.regression =truncating_count_n,.CT=cancer_type,
                     .tbl = regression_tbl,.tail = .test_tail)})) %>>%(?.)%>>%
-      mutate(out_reg =paste0("R=",signif(truncating_count_n,2)," P",
-                             ifelse(p_value==0,"<0.0001",paste0("=",signif(p_value,2)))))
+      mutate(out_reg =ifelse(truncating_count_n==0,"",
+               paste0("R=",signif(truncating_count_n,2)," P",
+                             ifelse(p_value==0,"<0.0001",paste0("=",signif(p_value,2))))))
   }
+  regression=regression%>>%mutate(abintercept=X.Intercept.-truncating_count_n)
   .plot = .tbl %>>%truncating_filling()%>>%
     ggplot(aes(x=as.factor(truncating_count_n), y=age))+
     geom_violin(scale = "count")+
@@ -140,13 +148,13 @@ truncate_plot_bycantype = function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
     scale_y_continuous(breaks = c(0,20,40,60,80),limits = c(0,90))+
     facet_wrap( ~ cancer_type, ncol = 5)+
     geom_text(data =.tbl %>>%count(cancer_type,truncating_count_n),
-              aes(x=as.factor(truncating_count_n),y=2.5,label=n),size=2.5,position="stack",angle=-45)+
+              aes(x=as.factor(truncating_count_n),y=2.5,label=n),size=2.5,position="stack",angle=45,hjust=0)+
     geom_abline(data = regression %>>%filter(p_value > 0.05,X.Intercept. >0),
-                aes(intercept = X.Intercept.,slope = truncating_count_n),linetype="dashed")+
+                aes(intercept = abintercept,slope = truncating_count_n),linetype="dashed")+
     geom_abline(data = regression %>>%filter(p_value <= 0.05,X.Intercept. >0),
-                aes(intercept = X.Intercept.,slope = truncating_count_n))+
-    geom_text(data = regression, aes(x=.coef_posi,y=15,label =out_reg),size=3.5,hjust=1)+
-    xlab("Number of Truncated Gene")+ylab("Age at Diagnosis")+
+                aes(intercept = abintercept,slope = truncating_count_n))+
+    geom_text(data = regression, aes(x=.coef_posi,y=15,label =out_reg),size=3,hjust=1)+
+    xlab("Number of truncating and splice variants")+ylab("Age at Diagnosis")+
     theme(panel.grid.minor.x = element_blank(),panel.background = element_rect(fill="transparent",colour="black"),
           panel.grid.major.y = element_line(colour = "gray"),panel.grid.major.x = element_line(colour = "gray95"),
           axis.line = element_line(colour = "black"),axis.ticks.y = element_blank(),
