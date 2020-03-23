@@ -205,8 +205,7 @@ write_df(blood_white_maf_for_cumulative,"/Volumes/DR8TB2/tcga_rare_germ/top_driv
 coverage=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/coverage.tsv.gz") 
 patient_tdg = patient_list %>>%
   left_join(coverage%>>%dplyr::select(patient_id,all))%>>%
-  filter(all>max(all)/2)%>>%
+  filter(all > (max(all,na.rm = T)/2))%>>%
   mutate(border=mean(all)-sd(all)*2)%>>%
   filter(all>border)%>>%dplyr::select(-all,-border)
 write_df(patient_tdg,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv")
-

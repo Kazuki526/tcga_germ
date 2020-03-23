@@ -51,6 +51,39 @@ control_gnomad = read_tsv("/Volumes/DR8TB2/gnomAD/maf38/non_cancer_maf/non_cance
   dplyr::select(chr,posi,ref,alt,mutype,filter,SYMBOL,AC,AN,nhomalt,AF,AC_white,AN_white,AF_white,AF_black) %>>%
   dplyr::rename(gene_symbol =SYMBOL,start = posi) %>>%
   inner_join(control_genes%>>%dplyr::select(-role))
+##################### tally norm in white #####################
+if(0){
+  tally_norm_maf_white = norm_maf_all%>>%
+    filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
+    tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
+    filter(ref != alt,chr!="chrX")%>>%
+    mutate(homo=ifelse(n_genotype=="homo",1,0))%>>%
+    inner_join(patient_list%>>%filter(race=="white")%>>%dplyr::select(patient_id))%>>%
+    group_by(chr,start,end,ref,alt) %>>%
+    summarise(ac_cancer=n(),hom_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
+              Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
+              cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
+    ungroup() %>>%
+    left_join(read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/site_coverage_all.tsv"))%>>%
+    mutate(an_cancer = an_white+an_black+an_other)
+  write_df(tally_norm_maf_white,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/tally_norm_maf_white.tsv.gz")
+  tally_norm_maf_white_cont = norm_maf_all_cont %>>%
+    filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
+    tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
+    filter(ref != alt)%>>%
+    mutate(homo=ifelse(n_genotype=="homo",1,0))%>>%
+    inner_join(patient_list%>>%filter(race=="white")%>>%dplyr::select(patient_id))%>>%
+    group_by(chr,start,end,ref,alt) %>>%
+    summarise(ac_cancer=n(),hom_cancer=sum(homo)/2,gene_symbol=first(gene_symbol),
+              Consequence=first(Consequence),PolyPhen=first(PolyPhen),mutype=first(mutype),
+              cDNA_position=first(cDNA_position),CDS_position=first(CDS_position)) %>>%
+    ungroup() %>>%
+    left_join(read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/site_coverage_all.tsv"))%>>%
+    mutate(an_cancer = an_white+an_black+an_other)
+  write_df(tally_norm_maf_white_cont,"/Volumes/DR8TB2/tcga_rare_germ/control_gene/tally_nomr_maf_white_cont.tsv.gz")
+}
+tally_norm_maf_white = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/tally_norm_maf_white.tsv.gz")
+tally_norm_maf_white_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/tally_nomr_maf_white_cont.tsv.gz")
 #########################################################################################################
 ############################################### QC process ##############################################
 #########################################################################################################
@@ -88,18 +121,19 @@ count_variant = function(.data,.db="tcga",.gene="tdg",.duplicate=F,.somatic=F){
 
   .data %>>%
     filter(get(.db)=="ok")%>>%
-    {if(.duplicate){.%>>%anti_join(duplicate_site_all)}else{.}}%>>%
+    {if(.duplicate){.%>>%anti_join(duplicate_site_all)%>>%filter(gene_symbol!="KMT2C")}else{.}}%>>%
     {if(.somatic){.%>>%anti_join(somatic_recurrent_all)}else{.}}%>>%
     mutate(mutation_class = ifelse(ref=="-"|alt=="-",
                                    paste(.db,.gene,"indel",sep = "_"),
                                    paste(.db,.gene,"SNV",sep = "_"))) %>>%
     count(mutation_class)
 }
-mixtdg_tcga_gnomad = tally_norm_maf%>>%dplyr::select(chr,start,ref,alt)%>>%mutate(tcga="ok")%>>%
-  full_join(tdg_gnomad%>>%dplyr::select(chr,start,ref,alt,AF,AF_white)%>>%mutate(gnomAD="ok"))%>>%
+
+mixtdg_tcga_gnomad = tally_norm_maf_white%>>%dplyr::select(gene_symbol,chr,start,ref,alt)%>>%mutate(tcga="ok")%>>%
+  full_join(tdg_gnomad%>>%dplyr::select(gene_symbol,chr,start,ref,alt,AF,AF_white)%>>%mutate(gnomAD="ok"))%>>%
   mutate_at(vars(AF,AF_white),.funs=~ifelse(is.na(.),0,.))%>>%mutate(mix="ok")
-mixcont_tcga_gnomad = tally_norm_maf_cont%>>%dplyr::select(chr,start,ref,alt)%>>%mutate(tcga="ok")%>>%
-  full_join(control_gnomad%>>%dplyr::select(chr,start,ref,alt,AF,AF_white)%>>%mutate(gnomAD="ok"))%>>%
+mixcont_tcga_gnomad = tally_norm_maf_white_cont%>>%dplyr::select(gene_symbol,chr,start,ref,alt)%>>%mutate(tcga="ok")%>>%
+  full_join(control_gnomad%>>%dplyr::select(gene_symbol,chr,start,ref,alt,AF,AF_white)%>>%mutate(gnomAD="ok"))%>>%
   mutate_at(vars(AF,AF_white),.funs=~ifelse(is.na(.),0,.))%>>%mutate(mix="ok")
 
 #non QC

@@ -15,6 +15,15 @@ while(<TDG>){
 		$top_driver_genes{$line[0]}=$line[1]; #if ref>=4 top driver genes
 }
 close TDG;
+my $cont_file = "/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_genes.tsv";
+open(CG,"$cont_file") or die "ERROR::cannot open $cont_file\n";
+<CG>;
+while(<CG>){
+		chomp;
+		my @line = split(/\t/,);
+		$top_driver_genes{$line[0]}=0;
+}
+close CG;
 
 my $vcf_file = "raw_file/PCA.r1.TCGAbarcode.merge.tnSwapCorrected.10389.vcf.gz";
 -e $vcf_file or die "ERROR::not exist $vcf_file\n";
@@ -24,27 +33,33 @@ open(VCF,"gunzip -c $vcf_file|");
 my @ann_list = qw(Chromosome Start_Position End_Position Strand Reference_Allele Tumor_Seq_Allele2 Consequence IMPACT Gene HGVSc HGVSp cDNA_position CDS_position Protein_position Amino_acids Codons CANONICAL SIFT PolyPhen Feature);
 open(TDGANN,">annotation_extract/top_driver_genes.maf");
 open(ODGANN,">annotation_extract/other_driver_genes.maf");
+open(CONANN,">annotation_extract/control_genes.maf");
 print TDGANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
 print ODGANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
+print CONANN "Hugo_Symbol\t".join("\t",@ann_list)."\n";
 
 open(TDGVCF,"|gzip -c >extract_vcf/top_driver_genes.vcf.gz");
 open(ODGVCF,"|gzip -c >extract_vcf/other_driver_genes.vcf.gz");
+open(CONVCF,"|gzip -c >extract_vcf/control_genes.vcf.gz");
 my $vcf_list = "#chr\tposi\tid\tref\talt\tqual\tfilter\tinfo\n";
 print TDGVCF "$vcf_list";
 print ODGVCF "$vcf_list";
+print CONVCF "$vcf_list";
 
 open(TDGOUT,"|gzip -c >maf_patient/top_driver_genes_patient.tsv.gz");
 open(ODGOUT,"|gzip -c >maf_patient/other_driver_genes_patient.tsv.gz");
+open(CONOUT,"|gzip -c >maf_patient/control_genes_patient.tsv.gz");
 my $out_list = "patient_id\tchr\tposi\tref\tallele1\tallele2\tfilter\tDP\tAD\tgene\tConsequence\tIMPACT\n";
 print TDGOUT "$out_list";
 print ODGOUT "$out_list";
+print CONOUT "$out_list";
 
 my $chr="";
 my %focal_site=();
 my @col_info=();
 while(<VCF>){
 		if($_ =~ /^##/){next;}
-		if($_ =~ /^#/){$_ =~ s/#//;@col_info=split(/\t/,);next;}
+		if($_ =~ /^#CHROM/){$_ =~ s/#//;chomp;@col_info=split(/\t/,);next;}
 		if($_ =~ /^$chr\t/){
 				if($_=~/^$chr\t(\d+)\t\S+\t(\w+)\t(\w+)\t/){
 						my($posi,$ref,$alt)=($1,$2,$3);
@@ -237,6 +252,8 @@ sub pull_focal_site_from_maf( $ ){
 				if(defined $top_driver_genes{$gene}){
 						if($top_driver_genes{$gene} >=4){
 								print TDGANN "$ann\n";
+						}elsif($top_driver_genes{$gene}==0){
+								print CONANN "$ann\n";
 						}else{
 								print ODGANN "$ann\n";
 						}
@@ -268,6 +285,8 @@ sub print_out ( $ $ ){
 		if(defined $top_driver_genes{$gene}){
 				if($top_driver_genes{$gene} >= 4){
 						print TDGOUT "$out";
+				}elsif($top_driver_genes{$gene}==0){
+						print CONOUT "$out";
 				}else{
 						print ODGOUT "$out";
 				}
@@ -280,6 +299,8 @@ sub print_vcf ( $ $ ){
 		if(defined $top_driver_genes{$gene}){
 				if($top_driver_genes{$gene} >= 4){
 						print TDGVCF "$vcf";
+				}elsif($top_driver_genes{$gene}==0){
+						print CONVCF "$vcf";
 				}else{
 						print ODGVCF "$vcf";
 				}

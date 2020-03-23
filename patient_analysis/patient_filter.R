@@ -34,7 +34,8 @@ patient_list = bam_list %>>%
                       ifelse(race=="black or african american" &ethnicity!="hispanic or latino","black","other"))) %>>%
   mutate(race_ = ifelse(is.na(race_),"other",race_)) %>>%
   dplyr::select(-race,-ethnicity,-`Primary Blood Derived Cancer - Peripheral Blood`)%>>%
-  dplyr::rename(race=race_)
+  dplyr::rename(race=race_)%>>%
+  mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"))
 write_df(patient_list,"~/git/tcga_germ/variant_call/focal_patient_list.tsv")
 
 bam_list%>>%
@@ -48,7 +49,7 @@ bam_list%>>%
 ##################################### make paient info table ##########################################
 patient_info = bam_list %>>%
   count(cancer_type,patient_id,gender,race,ethnicity,age)%>>%dplyr::select(-n)%>>%
-  right_join(patient_list%>>%dplyr::select(patient_id))%>>%
+  right_join(patient_list%>>%filter(race=="white")%>%dplyr::select(patient_id))%>>%
   filter(!is.na(age))
 #check
 patient_info %>>% count(patient_id) %>>% filter(n>1)
@@ -56,51 +57,40 @@ patient_info %>>% count(patient_id) %>>% filter(n>1)
 patient_info %>>%count(cancer_type,gender) %>>%
   mutate(gender = ifelse(is.na(gender),"not_reported",gender)) %>>%
   tidyr::spread(gender,n) %>>%
-#race
-  left_join(patient_info %>>%mutate(race=ifelse(is.na(race),"not reported",race))%>>%
-              count(cancer_type,race)%>>%
-              tidyr::spread(race,n),by="cancer_type")%>>%
-  
-#ethnicity
-  left_join(patient_info %>>%mutate(ethnicity=ifelse(ethnicity=="not reported",NA,ethnicity))%>>%
-              count(cancer_type,ethnicity)%>>%
-              tidyr::spread(ethnicity,n),by="cancer_type")%>>%
 #age
   left_join(patient_info %>>%filter(!is.na(age))%>>%
               group_by(cancer_type)%>>%
-              summarise(`mean age of oncet`=mean(age/365.25)),by="cancer_type")%>>%
+              summarise(`mean age of onset`=round(mean(age/365.25),digits=2),
+                        `sd age of onset`=round(sd(age/365.25),digits=2))
+                        ,by="cancer_type")%>>%
   left_join(patient_info%>>%count(cancer_type),by="cancer_type")%>>%
-  dplyr::select(cancer_type,female,male,`american indian or alaska native`,asian,`black or african american`,
-                `native hawaiian or other pacific islander`,white,`not reported`,`hispanic or latino`,`not hispanic or latino`,
-                `<NA>`,`mean age of oncet`,n)%>>%
+  dplyr::select(cancer_type,female,male,`mean age of onset`,`sd age of onset`,n)%>>%
   write_df("~/Dropbox/work/rare_germ/patient_info_table.tsv",na="-")
 
 #patient list 
 patient_list %>>%
-  mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"), age = age/365.25,
-         Caucasian=ifelse(race=="white","yes","-")) %>>%
-  mutate_all(~ifelse(is.na(.),0,.)) %>>%dplyr::select(-race)%>>%
-  left_join(patient_info%>>%dplyr::select(patient_id,race,ethnicity))%>>%
-  dplyr::select(cancer_type,patient_id,gender,race,ethnicity,Caucasian,age)%>>%
+  mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"), age = round(age/365.25,digit=2)) %>>%
+  mutate_all(~ifelse(is.na(.),0,.)) %>>%filter(race=="white")%>>%
+  dplyr::select(cancer_type,patient_id,gender,age,bloodnorm,solidnorm,tumor)%>>%
   arrange(cancer_type,patient_id)%>>%
   write_df("~/Dropbox/work/rare_germ/patient_list_S3.tsv")
 
 
 #age distribution plot
-pcount=patient_list%>>%filter(!is.na(age))%>>%
+pcount=patient_list%>>%filter(!is.na(age),race=="white")%>>%
   group_by(cancer_type)%>>%summarise(n=n(),age=mean(age))%>>%
   mutate(arrange_order=row_number(age))
-patient_list%>>%filter(!is.na(age))%>>%
+patient_list%>>%filter(!is.na(age),race=="white")%>>%
   left_join(pcount%>>%dplyr::select(cancer_type,arrange_order))%>>%
   mutate(age=age/365.25)%>>%
   ggplot(aes(x=reorder(cancer_type,arrange_order),y=age))+
   geom_violin(scale = "count")+
   #geom_boxplot(width=.3,fill="black")+ 
   stat_summary(fun.y=mean,geom = "point", fill="black",colour="black",shape=21,size=2)+
-  geom_text(data = pcount,aes(x=cancer_type,y=10,label=n),angle=90,size=8)+
+  geom_text(data = pcount,aes(x=cancer_type,y=10,label=n),angle=45,size=4)+
   ylab("Age of Onset")+xlab("TCGA Cancer Type")+
-  theme_bw()
-ggsave("~/Dropbox/work/rare_germ/figs/cancer_type_age_plot.pdf",width = 20,height = 8)
+  theme_bw()+theme(axis.text.x = element_text(angle = 90))
+ggsave("~/Dropbox/work/rare_germ/figs/cancer_type_age_plot.pdf",width = 10,height = 4)
 
 #################################################################################################################
 ########## by patient coverage plot
@@ -110,11 +100,12 @@ coverage_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/coverage_con
   inner_join(patient_list%>>%filter(!is.na(age))%>>%dplyr::select(patient_id))
 
 #filter out lower than half coverage
-coverage = coverage%>>%filter(all > max(all)/2)%>>%mutate(border=mean(all)-sd(all)*2) #exclude 42 patient
-coverage_cont = coverage_cont%>>%filter(coverage>max(coverage)/2)%>>%mutate(border=mean(coverage)-sd(coverage)*2) #exclude 65 patient
+coverage = coverage%>>%filter(all > max(all)/2)%>>%mutate(border=mean(all)-sd(all)*2) #exclude 42 patient(caucasian 9)
+coverage_cont = coverage_cont%>>%filter(coverage>max(coverage)/2)%>>%mutate(border=mean(coverage)-sd(coverage)*2) #exclude 65 patient (caucasian 30)
 
-coverage%>>%summarise(mean(all),sd(all)) #mean=313193, sd=10439
+coverage%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(all),sd(all)) #mean=313177, sd=10180
 .plot=coverage %>>%
+  inner_join(patient_list%>>%filter(race=="white"))%>>%
   ggplot()+
   geom_histogram(aes(x=all),bins = 100)+
   geom_vline(xintercept=first(coverage$border),color="red")+
@@ -123,8 +114,9 @@ coverage%>>%summarise(mean(all),sd(all)) #mean=313193, sd=10439
 .plot
 ggsave("~/Dropbox/work/rare_germ/figs/tdg_coverage.pdf",.plot,width = 10,height = 5)
 
-coverage_cont%>>%summarise(mean(coverage),sd(coverage)) #mean=518595 sd=26156
+coverage_cont%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(coverage),sd(coverage)) #mean=518221 sd=24864
 .plot=coverage_cont %>>%
+  inner_join(patient_list%>>%filter(race=="white"))%>>%
   ggplot()+
   geom_histogram(aes(x=coverage),bins = 100)+
   geom_vline(xintercept = first(coverage_cont$border),color="red")+

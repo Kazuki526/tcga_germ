@@ -31,17 +31,20 @@ while(<PLIST>){
 		chomp;
 		my @line = split(/\t/,);
 		push(@patient_list,$line[$col{patient_id}]);
-		my $cancer_type="";
-		if($line[$col{cancer_type}] =~ /^TCGA-(\w+)$/){$cancer_type = lc $1;}else{die "ERROR::what cancer type $line[$col{cancer_type}]\n";}
 		my($nblood,$nsolid)=($line[$col{bloodnorm}],$line[$col{solidnorm}]);
 		if($nblood eq "NA"){$nblood = 0;}
 		if($nsolid eq "NA"){$nsolid = 0;}
-		$patient_inf{$line[$col{patient_id}]}{cancer_type}=$cancer_type;
+		my $ntumor=0;
+		if($line[$col{tumor}] eq "NA"){$ntumor=$line[$col{bloodtumor}];
+		}elsif($line[$col{bloodtumor}] eq "NA"){$ntumor=$line[$col{tumor}];
+		}else{die "what patient? $line[$col{patient_id}] donot have tumor and bloodtumor?\n";}
+		if($ntumor !~ /^[0-9]+$/){ die "ERROR::$line[$col{patient_id}] have no tumor??\n";}
+		$patient_inf{$line[$col{patient_id}]}{cancer_type}= lc $line[$col{cancer_type}];
 		$patient_inf{$line[$col{patient_id}]}{gender}=$line[$col{gender}];
 		$patient_inf{$line[$col{patient_id}]}{nblood}=$nblood;
 		$patient_inf{$line[$col{patient_id}]}{nsolid}=$nsolid;
 		$patient_inf{$line[$col{patient_id}]}{nnorm} =$nblood+$nsolid;
-		$patient_inf{$line[$col{patient_id}]}{ntumor}=$line[$col{tumor}];
+		$patient_inf{$line[$col{patient_id}]}{ntumor}=$ntumor;
 }
 close PLIST;
 #debug
@@ -54,7 +57,7 @@ $header=<BLIST>; chomp $header;
 while(<BLIST>){
 		chomp;
 		my @line = split(/\t/,);
-		if($line[$col{sample_type}] eq "Primary Tumor"){
+		if(($line[$col{sample_type}] eq "Primary Tumor")||($line[$col{sample_type}] eq "Primary Blood Derived Cancer - Peripheral Blood")){
 				$patient_inf{$line[$col{patient_id}]}{tumor_file}.="$line[$col{file_name}],";
 				$patient_inf{$line[$col{patient_id}]}{tumor_id}.="$line[$col{id}],";
 				$patient_inf{$line[$col{patient_id}]}{tumor_sample_id}.="$line[$col{sample_id}],";

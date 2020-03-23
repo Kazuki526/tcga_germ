@@ -40,12 +40,10 @@ while(<PLIST>){
 		chomp;
 		my @line = split(/\t/,);
 		push(@patient_list,$line[$col{patient_id}]);
-		my $cancer_type="";
-		if($line[$col{cancer_type}] =~ /^TCGA-(\w+)$/){$cancer_type = lc $1;}else{die "ERROR::what cancer type $line[$col{cancer_type}]\n";}
 		my($nblood,$nsolid)=($line[$col{bloodnorm}],$line[$col{solidnorm}]);
 		if($nblood eq "NA"){$nblood = 0;}
 		if($nsolid eq "NA"){$nsolid = 0;}
-		$patient_inf{$line[$col{patient_id}]}{cancer_type}=$cancer_type;
+		$patient_inf{$line[$col{patient_id}]}{cancer_type}=lc $line[$col{cancer_type}];
 		$patient_inf{$line[$col{patient_id}]}{race}=$line[$col{race}];
 		$patient_inf{$line[$col{patient_id}]}{nblood}=$nblood;
 		$patient_inf{$line[$col{patient_id}]}{nsolid}=$nsolid;
