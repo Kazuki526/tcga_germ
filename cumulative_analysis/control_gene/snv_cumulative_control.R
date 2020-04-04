@@ -22,8 +22,8 @@ options(scipen=100)
 control_genes = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_genes.tsv")
 
 ####################################### TCGA data ############################################
-patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
-patient_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv")
+patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
+patient_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv",col_types = "cciciiiic")
 all_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/all_maf_for_cumulative_control.tsv.gz")
 white_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/white_maf_for_cumulative_control.tsv.gz")
 ##################################### gnomAD data #############################################
@@ -60,6 +60,8 @@ cumulative_plot_cont(.MAF_end = 0.05, .more_1par = F,.mutype = "silent",.facet_b
 #####################################################################################################
 # MAF 0.01%ごとに
 if(1){
+ regression_table_trunc_cont = make_regression_tabel_trunc_cont()
+ write_df(regression_table_cont,"age_plot/cumulative/regression/trunc.tsv")
  regression_table_cont = make_regression_tabel_cont() 
  write_df(regression_table_cont,"age_plot/cumulative/regression/nonsyn.tsv")
  regression_table_silent_cont = make_regression_tabel_cont(.mutype = "silent")
@@ -105,6 +107,8 @@ cumulative_plot_cont(.maf=white_maf_for_cumulative_cont,.race = "white",
 #####################################################################################################
 # MAF 0.01%ごとに
 if(1){
+  regression_table_trunc_cont = make_regression_tabel_trunc_cont(.maf=white_maf_for_cumulative_cont,.race="white")
+  write_df(regression_table_trunc_cont,"age_plot/cumulative/regression/trunc_white.tsv")
   regression_table_cont = make_regression_tabel_cont(.maf=white_maf_for_cumulative_cont,.race="white") 
   write_df(regression_table_cont,"age_plot/cumulative/regression/nonsyn_white.tsv")
   regression_table_silent_cont = make_regression_tabel_cont(.maf=white_maf_for_cumulative_cont,.race = "white",.mutype = "silent")
@@ -139,8 +143,8 @@ if(0){
   .plot = cowplot::plot_grid(.plot_reg,.plots_reg)
   ggsave("age_plot/fig/presentation/control_reg.pdf",.plot,width = 15,height = 8)
 }
-#####################################################################################
 ############################### figure 用に調整 ##############################################
+if(0){
 .plot_trunc = truncating_count_cont_rare %>>%
   truncate_plot_allcantype(.permu_file = "all_race/truncate_rare.tsv")
 lm1=read_tsv("age_plot/cumulative/all_race/lm_missense0-1regression_all_race.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
@@ -216,5 +220,35 @@ regression_table_silent=read_tsv("age_plot/cumulative/regression/syn_white.tsv")
 
 .plot
 ggsave("age_plot/fig/control_ns_reg_and_violin_allwhite.pdf",.plot,width = 12,height = 8)
+}
+############################### figure 用に調整 ##############################################
+if(1){
+.plot_truncw = truncating_count_cont_rare_white %>>%
+  truncate_plot_allcantype(.permu_file = "all_race/truncate_rare_white.tsv")
+lm1w=read_tsv("age_plot/cumulative/white/lm_missense0-1regression_white.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10w=read_tsv("age_plot/cumulative/white/lm_missense0-10regression_white.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plot005w=cumulative_plot_cont(.maf= white_maf_for_cumulative_cont,.MAF_end = 0.05,.race = "white",.more_1par = T,
+                               .permu_file = "white/missense005_white.tsv",.all_color = "darkred",.save = F,
+                               .regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1w$X.Intercept.,slope=lm1w$missense_num),colour="blue",linetype=lm1w$LT)+
+  geom_abline(aes(intercept=lm10w$X.Intercept.,slope=lm10w$missense_num),colour="green",linetype=lm10w$LT)
+lm1sw=read_tsv("age_plot/cumulative/white/lm_silent0-1regression_white.tsv") %>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10sw=read_tsv("age_plot/cumulative/white/lm_silent0-10regression_white.tsv") %>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plots005w=cumulative_plot_cont(.maf= white_maf_for_cumulative_cont,.MAF_end = 0.05,.race = "white",.mutype = "silent",
+                                .permu_file = "white/silent005_white.tsv",.all_color = "darkred",.save = F,
+                                .more_1par = F,.regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1sw$X.Intercept.,slope=lm1sw$missense_num),colour="blue",linetype=lm1sw$LT)+
+  geom_abline(aes(intercept=lm10sw$X.Intercept.,slope=lm10sw$missense_num),colour="green",linetype=lm10sw$LT)
 
+regression_table_trunc=read_tsv("age_plot/cumulative/regression/trunc_white.tsv")
+regression_table=read_tsv("age_plot/cumulative/regression/nonsyn_white.tsv")
+regression_table_silent=read_tsv("age_plot/cumulative/regression/syn_white.tsv")
+.plott_regw = regression_plot_log(regression_table_trunc,.black=0.05)
+.plot_regw = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
+.plots_regw  = regression_plot_log(regression_table_silent,.dred=0.05,.blue=1,.green = 10)
 
+.plot=cowplot::plot_grid(.plot_truncw+ggtitle(label = NULL),.plot005w+ggtitle(label = NULL),.plots005w+ggtitle(label = NULL),
+                         .plott_regw,.plot_regw,.plots_regw,nrow = 2,rel_widths = c(3,3.5,3.5),labels = c("a","c","e","b","d","f"))
+ggsave("age_plot/fig/control_ns_reg_and_violin_white.pdf",.plot,width = 12,height = 8)
+
+}

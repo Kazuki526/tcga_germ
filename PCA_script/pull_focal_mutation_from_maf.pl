@@ -116,7 +116,7 @@ while(<VCF>){
 						my @allele=split(/\//,$format[0]);
 						my $out_format = "";
 						if($DP_posi == 100){$out_format="NA\t";}else{$out_format="$format[$DP_posi]\t";}
-						if($AD_posi == 100){$out_format.="NA\t";}else{$out_format.="$format[$AD_posi]\t";}
+						if($AD_posi == 100){$out_format.="NA";}else{$out_format.="$format[$AD_posi]";}
 						if(($allele[0] != $allele[1])&&($allele[0] !=0)){
 								my($a0,$a1)=@allele;
 								if(($focal[$a0]==0)&&($focal[$a1]==0)){next;}
@@ -162,15 +162,15 @@ while(<VCF>){
 						my @format = split(/:/,$line[$ind]);
 						my $out_format = "";
 						if($DP_posi == 100){$out_format="NA\t";}else{$out_format="$format[$DP_posi]\t";}
-						if($AD_posi == 100){$out_format.="NA\t";}else{$out_format.="$format[$AD_posi]\t";}
+						if($AD_posi == 100){$out_format.="NA";}else{$out_format.="$format[$AD_posi]";}
 						if($format[0] eq "0/1"){
 								$het++;
-								my $out = "$col_info[$ind]\t$line[0]\t$posi\t$ref\t$ref\t$alt\t$line[6]\t$out_format";
+								my $out = "$col_info[$ind]\t$line[0]\t$posi\t$ref\t$ref\t$alt\t$line[6]\t$out_format\t";
 								$out.= "$focal_site{$allele}{gene}\t$focal_site{$allele}{Consequence}\t$focal_site{$allele}{IMPACT}\n";
 								&print_out($out,$focal_site{$allele}{gene});
 						}elsif($format[0] eq "1/1"){
 								$hom++;
-								my $out = "$col_info[$ind]\t$line[0]\t$posi\t$ref\t$alt\t$alt\t$line[6]\t$out_format";
+								my $out = "$col_info[$ind]\t$line[0]\t$posi\t$ref\t$alt\t$alt\t$line[6]\t$out_format\t";
 								$out.= "$focal_site{$allele}{gene}\t$focal_site{$allele}{Consequence}\t$focal_site{$allele}{IMPACT}\n";
 								&print_out($out,$focal_site{$allele}{gene});
 						}#else{print  "\nWARNING::what genotype or allele: $allele => $ind th FORMAT: $line[$ind]\n";}

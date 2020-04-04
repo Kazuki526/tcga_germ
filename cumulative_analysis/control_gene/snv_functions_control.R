@@ -309,6 +309,50 @@ cumulative_plot_cont = function(.maf=all_maf_for_cumulative_cont,.MAF_start = 0,
 }
 ###########################################################################################################
 #0.01%ごとにregressionしてみる
+make_regression_tabel_trunc_cont = function(.maf=all_maf_for_cumulative_cont,.vcf=control_gnomad,.race="all",
+                                      .fdr=0.01,.max_maf=50,.filter_maf=F,
+                                      .database="cancer",.duplicate=T,.somatic=T,.varscan=T,
+                                      .patient_list=patient_cont){
+  regression_out = function(.minor_allele_frequency,.maf,.patient_list){
+    if((.minor_allele_frequency*10000) %% 100 == 0){print(paste0("doing MAF=",.minor_allele_frequency*100))}
+    ##missense の数
+    missense_count = .maf %>>%
+      filter(MAF <= .minor_allele_frequency)%>>%
+      group_by(patient_id) %>>%
+      summarise(missense_num=sum(MAC)) %>>%
+      {left_join(.patient_list,.,by = c("patient_id"))} %>>%
+      mutate(missense_num = ifelse(is.na(missense_num),0,missense_num)) %>>%
+      ungroup()
+    #相関直線を
+    lm=lm(age ~ missense_num, data=missense_count)
+    as.data.frame(as.list(coef(lm))) %>>%
+      mutate(p_value = 1 - pf(summary(lm)$fstatistic["value"],summary(lm)$fstatistic["numdf"],
+                              summary(lm)$fstatistic["dendf"]))
+  }
+  if(.race=="all"){
+    .vcf = .vcf %>>%dplyr::select(chr,start,ref,alt,AF)
+  }else if(.race == "white"){
+    .vcf = .vcf %>>%mutate(AF=AF_white)%>>%dplyr::select(chr,start,ref,alt,AF)
+  }else if(.race == "black"){
+    .vcf = .vcf %>>%mutate(AF=AF_black)%>>%dplyr::select(chr,start,ref,alt,AF)
+  }
+  if(.race!="all"){
+    .patient_list = .patient_list %>>%filter(race==.race)%>>%mutate(age=age/365.25)%>>%dplyr::select(patient_id,age)
+  }else{
+    .patient_list = dplyr::select(.patient_list,patient_id,age)%>>%mutate(age=age/365.25)
+  }
+  if(.filter_maf){
+    .maf=maf_trim_for_cumulative_cont(.maf=.maf,.vcf=.vcf,.race=.race,.fdr=.fdr,.database=.database,
+                                      .duplicate=.duplicate,.somatic=.somatic,.varscan=.varscan)
+  }
+  .maf = .maf %>>%filter(mutype=="truncating"|mutype=="splice") %>>%
+    inner_join(control_genes%>>%select(gene_symbol))%>>%
+    dplyr::select(patient_id,MAF,MAC)
+  tibble::tibble(MAF=1:(.max_maf*100)) %>>%
+    mutate(MAF = MAF/10000) %>>%
+    mutate(regression = purrr::map(MAF,~regression_out(.,.maf,.patient_list)))%>>%
+    unnest()
+}
 make_regression_tabel_cont = function(.maf=all_maf_for_cumulative_cont,.vcf=control_gnomad,.race="all",
                                       .fdr=0.01,.mutype="missense",.max_maf=50,.filter_maf=F,
                                       .database="all",.duplicate=T,.somatic=T,.varscan=T,
@@ -372,7 +416,7 @@ make_regression_tabel_cont = function(.maf=all_maf_for_cumulative_cont,.vcf=cont
 }
 
 #### regressionの図のplot 3pattern
-regression_plot_log = function(.reg_tbl,.max_maf=50,.min=NA,.dred=NA,.blue=NA,.green=NA){
+regression_plot_log = function(.reg_tbl,.max_maf=50,.min=NA,.dred=NA,.blue=NA,.green=NA,.black=NA){
   .max=max(.reg_tbl$missense_num)
   .min=ifelse(is.na(.min),min(.reg_tbl$missense_num),.min)
   if(.max <0){.max=0}else if(.min >0){.min=0}
@@ -392,6 +436,7 @@ regression_plot_log = function(.reg_tbl,.max_maf=50,.min=NA,.dred=NA,.blue=NA,.g
           axis.title.y = element_text(size = 15),
           axis.title.x = element_text(size = 15),
           panel.border = element_blank(),axis.line = element_line())
+  if(!is.na(.black)){.plot=.plot+geom_vline(xintercept = .black,colour="black")}
   if(!is.na(.dred)){.plot=.plot+geom_vline(xintercept = .dred,colour="darkred")}
   if(!is.na(.blue)){.plot=.plot+geom_vline(xintercept = .blue,colour="blue")}
   if(!is.na(.green)){.plot=.plot+geom_vline(xintercept = .green,colour="green")}

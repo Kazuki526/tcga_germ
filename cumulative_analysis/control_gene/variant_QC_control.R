@@ -19,7 +19,7 @@ write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append
 
 control_genes = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_genes.tsv")
 ####################################### TCGA data ########################################################
-patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
+patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
 patien_all_info = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/all_patient_info.tsv",col_types = "ccccciidci")
 norm_maf_all_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/norm_maf_all_cont.tsv.gz")
 tally_norm_maf_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/tally_nomr_maf_cont.tsv.gz")
@@ -141,7 +141,8 @@ quality_filter_cont =
       filter(if(.somatic==T){is.na(recurrent_focal)}else{chr==chr})%>>%
       dplyr::select(-recurrent_focal,-duplicate_focal)
   }
-#quality_filter_cont(norm_maf_all_cont,.data_type = "maf")%>>%(?.)
+QC_maf_norm_cont=quality_filter_cont(norm_maf_all_cont,.data_type = "maf")
+write_df(QC_maf_norm_cont,"/Volumes/DR8TB2/tcga_rare_germ/control_gene/QC_norm_maf_all_cont.tsv.gz")
 ######################################################################################################
 ################################### germline mutation list ###########################################
 ######################################################################################################

@@ -30,8 +30,8 @@ write_df(driver_genes,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/driver_gen
 
 ############################################# patient infomation ############################################
 #patient_list = read_tsv("/Volumes/areca42TB/tcga/all_patient/patient_list.tsv")
-patient_list = read_tsv("~/git/tcga_germ/variant_call/focal_patient_list.tsv")%>>%
-  mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"))%>>%filter(!is.na(age))
+patient_list = read_tsv("~/git/tcga_germ/variant_call/focal_patient_list.tsv",col_types = "cciciiiic")%>>%
+  filter(!is.na(age))
 #write_df(patient_list,"/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
 
 ############################################# TCGA maf files #############################################
@@ -189,20 +189,4 @@ coverage=read_tsv("/Volumes/areca42TB2/gdc/top_driver_gene/all_patient/patient_c
 write_df(coverage,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/coverage.tsv.gz")
 ####################################################################
 #pathogenic variantをもつ患者のlist
-patient_with_ps_ = read_tsv("/Volumes/areca42TB/tcga/burden_plot/cell2018/charger/tcga/tcga_all_variants_grch38_charger.tsv") %>>%
-  dplyr::rename(chr=Chromosome,start=Start,ref=Reference,alt=Alternate,gene_symbol=HUGO_Symbol,
-                clinvar=ClinVar_Pathogenicity, acmg=ACMG_Classification, charger=CharGer_Classification,
-                trait=ClinVar_Traits) %>>%
-  filter(clinvar=="Pathogenic"|charger=="Pathogenic"|charger=="Likely Pathogenic")%>>%
-  left_join(norm_maf_all) %>>%
-  dplyr::select(gene_symbol,cancer_type,patient_id)
-#write_df(patient_with_ps,"all_patient/pathogenic_site_list.tsv")
-#この中でsignificantなのは？
-patient_with_ps = tibble(cancer_type=c("BRCA", "OV",   "BRCA", "OV",   "KIRP","BRCA","LUAD","PRAD","KIRC","GBM",  "UCEC"),
-                         gene_symbol=c("BRCA1","BRCA1","BRCA2","BRCA2","MET", "ATM", "ATM", "ATM", "BAP1","AXIN2","PTEN")) %>>%
-  mutate(significance="significant") %>>%
-  right_join(patient_with_ps_) %>>%
-  count(cancer_type,significance,patient_id)%>>%
-  dplyr::select(-n)
-  
-write_df(patient_with_ps,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_with_ps.tsv")
+#variant_call_varidation にて

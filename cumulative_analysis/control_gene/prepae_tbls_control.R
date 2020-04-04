@@ -19,7 +19,7 @@ write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append
 control_genes = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_genes.tsv")
 
 ####################################### TCGA data ########################################################
-patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
+patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
 patien_all_info = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/all_patient_info.tsv",col_types = "ccccciidci")
 
 ############################################# TCGA maf files #############################################

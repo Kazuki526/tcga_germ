@@ -149,6 +149,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
     as.character(ifelse(.legend==30,"30-",.legend))
   }
   regression=regression %>>%(?.)%>>%
+    mutate(p_value=ifelse(p_value>0.5,1-p_value,p_value))%>>%
     mutate(out_reg=ifelse(missense_num==0,"",
                           paste0("R=",signif(missense_num,2),", P",
                           ifelse(p_value==0,"<0.0001",paste0("=",signif(p_value,2))))),
@@ -311,7 +312,7 @@ make_regression_tabel = function(.maf=all_maf_for_cumulative,.vcf=tdg_gnomad,.ra
     unnest()
 }
 #### regressionの図のplot 3pattern
-regression_plot_log = function(.reg_tbl,.max_maf=50,.min=NA,.dred=NA,.blue=NA,.green=NA){
+regression_plot_log = function(.reg_tbl,.max_maf=50,.min=NA,.dred=NA,.blue=NA,.green=NA,.black=NA){
   .max=max(.reg_tbl$missense_num)
   .min=ifelse(is.na(.min),min(.reg_tbl$missense_num),.min)
   if(.max <0){.max=0}else if(.min >0){.min=0}
@@ -331,6 +332,7 @@ regression_plot_log = function(.reg_tbl,.max_maf=50,.min=NA,.dred=NA,.blue=NA,.g
           axis.title.y = element_text(size = 15),
           axis.title.x = element_text(size = 15),
           panel.border = element_blank(),axis.line = element_line())
+  if(!is.na(.black)){.plot=.plot+geom_vline(xintercept = .black,colour="black")}
   if(!is.na(.dred)){.plot=.plot+geom_vline(xintercept = .dred,colour="darkred")}
   if(!is.na(.blue)){.plot=.plot+geom_vline(xintercept = .blue,colour="blue")}
   if(!is.na(.green)){.plot=.plot+geom_vline(xintercept = .green,colour="green")}

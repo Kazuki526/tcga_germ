@@ -114,6 +114,7 @@ if(0){
 }
 
 ############################### figure 用に調整 ##############################################
+if(0){
 .plot_trunc = truncating_count_onco_rare %>>%
   truncate_plot_allcantype(.permu_file = "oncogene/truncate_rare.tsv")
 lm1=read_tsv("age_plot/cumulative/oncogene/all_race/lm_missense0-1_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
@@ -187,7 +188,47 @@ regression_table_silent=read_tsv("age_plot/cumulative/regression/oncogene_syn_wh
   cowplot::draw_plot_label("i",x=0.66,y=0.49,hjust = 0,vjust = 1,size = 20)+
   cowplot::draw_plot_label("j",x=0.66,y=0.19,hjust = 0,vjust = 1,size = 20)+
   cowplot::draw_text("In Caucasian",x=0.025,y=0.25,size=20,angle=90)
-  
-
 .plot
 ggsave("age_plot/fig/poster_fig/oncogene_ns_reg_and_violin_allwhite.pdf",.plot,width = 16,height = 12)
+}
+.plot_truncw = truncating_count_onco_rare_white %>>%
+  truncate_plot_allcantype(.permu_file = "oncogene/truncate_rare_white.tsv")
+lm1w=read_tsv("age_plot/cumulative/oncogene/white/lm_missense0-1_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10w=read_tsv("age_plot/cumulative/oncogene/white/lm_missense0-10_regression.tsv")%>>%mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plot005w=cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.race = "white",.role = "oncogene",
+                          .permu_file = "oncogene/missense_005_white.tsv",.all_color = "darkred",.save = F,
+                          .regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1w$X.Intercept.,slope=lm1w$missense_num),colour="blue",linetype=lm1w$LT)+
+  geom_abline(aes(intercept=lm10w$X.Intercept.,slope=lm10w$missense_num),colour="green",linetype=lm10w$LT)
+lm1sw=read_tsv("age_plot/cumulative/oncogene/white/lm_silent0-1_regression.tsv") %>>%
+  mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+lm10sw=read_tsv("age_plot/cumulative/oncogene/white/lm_silent0-10_regression.tsv") %>>%
+  mutate(LT=ifelse(p_value<0.05,"solid","dashed"))
+.plots005w=cumulative_plot(.maf= white_maf_for_cumulative,.MAF_end = 0.05,.race = "white",.mutype = "silent",
+                           .permu_file = "oncogene/silent_005_white.tsv",.all_color = "darkred",.save = F,
+                           .role = "oncogene",.regression_size = 5,.pnum_size = 3)+
+  geom_abline(aes(intercept=lm1sw$X.Intercept.,slope=lm1sw$missense_num),colour="blue",linetype=lm1sw$LT)+
+  geom_abline(aes(intercept=lm10sw$X.Intercept.,slope=lm10sw$missense_num),colour="green",linetype=lm10sw$LT)
+
+regression_table_trunc = read_tsv("age_plot/cumulative/regression/oncogene_trunc_white.tsv")
+regression_table=read_tsv("age_plot/cumulative/regression/oncogene_nonsyn_white.tsv")
+regression_table_silent=read_tsv("age_plot/cumulative/regression/oncogene_syn_white.tsv")
+.plott_regw = regression_plot_log(regression_table_trunc,.black=0.05)
+.plot_regw = regression_plot_log(regression_table,.dred=0.05,.blue=1,.green = 10)
+.plots_regw  = regression_plot_log(regression_table_silent,.dred=0.05,.blue=1,.green = 10)
+.plot = cowplot::ggdraw()+
+  cowplot::draw_plot(.plot_truncw+ggtitle(label = NULL),x=0,y=0.4,width=0.25,height=0.6)+
+  cowplot::draw_plot(.plott_regw,x=0,y=0,width=0.25,height=0.4)+
+  cowplot::draw_plot(.plot005w+ggtitle(label = NULL),x=0.3,y=0.4,width=0.35,height=0.6)+
+  cowplot::draw_plot(.plot_regw,x=0.3,y=0,width=0.35,height=0.4)+  
+  cowplot::draw_plot(.plots005w+ggtitle(label = NULL),x=0.65,y=0.4,width=0.35,height=0.6)+
+  cowplot::draw_plot(.plots_regw,x=0.65,y=0,width=0.35,height=0.4)+
+  
+  cowplot::draw_plot_label("a",x=0.01,y=0.99,hjust = 0,vjust = 1,size = 30)+
+  cowplot::draw_plot_label("b",x=0.01,y=0.39,hjust = 0,vjust = 1,size = 30)+
+  cowplot::draw_plot_label("c",x=0.31,y=0.99,hjust = 0,vjust = 1,size = 30)+
+  cowplot::draw_plot_label("d",x=0.31,y=0.39,hjust = 0,vjust = 1,size = 30)+
+  cowplot::draw_plot_label("e",x=0.66,y=0.99,hjust = 0,vjust = 1,size = 30)+
+  cowplot::draw_plot_label("f",x=0.66,y=0.39,hjust = 0,vjust = 1,size = 30)
+.plot
+ggsave("age_plot/fig/poster_fig/oncogene_ns_reg_and_violin_white.pdf",.plot,width = 16,height = 12)

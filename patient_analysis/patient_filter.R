@@ -28,19 +28,20 @@ patient_list = bam_list %>>%
   count(patient_id,cancer_type,sample_type,age,gender,race,ethnicity)%>>%
   tidyr::spread(key=sample_type,value=n)%>>%
   filter(!(is.na(`Blood Derived Normal`) &is.na(`Solid Tissue Normal`)),
-          !is.na(`Primary Tumor`), is.na(`Primary Blood Derived Cancer - Peripheral Blood`))%>>%
-  rename(bloodnorm=`Blood Derived Normal`,solidnorm=`Solid Tissue Normal`,tumor=`Primary Tumor`)%>>%
+          !(is.na(`Primary Tumor`)&is.na(`Primary Blood Derived Cancer - Peripheral Blood`)))%>>%
+  rename(bloodnorm=`Blood Derived Normal`,solidnorm=`Solid Tissue Normal`,
+         tumor=`Primary Tumor`,bloodtumor=`Primary Blood Derived Cancer - Peripheral Blood`)%>>%
   mutate(race_=ifelse(race=="white" &ethnicity!="hispanic or latino","white",
                       ifelse(race=="black or african american" &ethnicity!="hispanic or latino","black","other"))) %>>%
   mutate(race_ = ifelse(is.na(race_),"other",race_)) %>>%
-  dplyr::select(-race,-ethnicity,-`Primary Blood Derived Cancer - Peripheral Blood`)%>>%
+  dplyr::select(-race,-ethnicity)%>>%
   dplyr::rename(race=race_)%>>%
   mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"))
 write_df(patient_list,"~/git/tcga_germ/variant_call/focal_patient_list.tsv")
 
 bam_list%>>%
   dplyr::select(patient_id,file_name,id,sample_type,sample_id)%>>%
-  inner_join(focal_patient%>>%dplyr::select(patient_id))%>>%
+  inner_join(patient_list%>>%dplyr::select(patient_id))%>>%
   write_df("~/git/tcga_germ/variant_call/bam_file_list.tsv")
 
 
@@ -56,22 +57,28 @@ patient_info %>>% count(patient_id) %>>% filter(n>1)
 #gender
 patient_info %>>%count(cancer_type,gender) %>>%
   mutate(gender = ifelse(is.na(gender),"not_reported",gender)) %>>%
+  bind_rows(patient_info%>>%count(gender)%>>%mutate(cancer_type="All cancer type"))%>>%
   tidyr::spread(gender,n) %>>%
 #age
   left_join(patient_info %>>%filter(!is.na(age))%>>%
               group_by(cancer_type)%>>%
               summarise(`mean age of onset`=round(mean(age/365.25),digits=2),
-                        `sd age of onset`=round(sd(age/365.25),digits=2))
-                        ,by="cancer_type")%>>%
-  left_join(patient_info%>>%count(cancer_type),by="cancer_type")%>>%
+                        `sd age of onset`=round(sd(age/365.25),digits=2))%>>%
+              bind_rows(patient_info%>>%
+                          summarise(`mean age of onset`=round(mean(age/365.25),digits=2),
+                                    `sd age of onset`=round(sd(age/365.25),digits=2))%>>%
+                          mutate(cancer_type="All cancer type")),by="cancer_type")%>>%
+  left_join(patient_info%>>%count(cancer_type)%>>%
+              bind_rows(patient_info%>>%summarise(n=n())%>>%
+                          mutate(cancer_type="All cancer type")),by="cancer_type")%>>%
   dplyr::select(cancer_type,female,male,`mean age of onset`,`sd age of onset`,n)%>>%
   write_df("~/Dropbox/work/rare_germ/patient_info_table.tsv",na="-")
 
 #patient list 
-patient_list %>>%
+patient_list %>>%filter(!is.na(age))%>>%
   mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"), age = round(age/365.25,digit=2)) %>>%
   mutate_all(~ifelse(is.na(.),0,.)) %>>%filter(race=="white")%>>%
-  dplyr::select(cancer_type,patient_id,gender,age,bloodnorm,solidnorm,tumor)%>>%
+  dplyr::select(cancer_type,patient_id,gender,age,bloodnorm,solidnorm,tumor,bloodtumor)%>>%
   arrange(cancer_type,patient_id)%>>%
   write_df("~/Dropbox/work/rare_germ/patient_list_S3.tsv")
 
@@ -94,6 +101,8 @@ ggsave("~/Dropbox/work/rare_germ/figs/cancer_type_age_plot.pdf",width = 10,heigh
 
 #################################################################################################################
 ########## by patient coverage plot
+patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv",col_types = "cciciiiic")
+patient_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv",col_types = "cciciiiic")
 coverage=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/coverage.tsv.gz")%>>%
   inner_join(patient_list%>>%filter(!is.na(age))%>>%dplyr::select(patient_id))
 coverage_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/coverage_cont.tsv.gz") %>>%
@@ -103,7 +112,7 @@ coverage_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/coverage_con
 coverage = coverage%>>%filter(all > max(all)/2)%>>%mutate(border=mean(all)-sd(all)*2) #exclude 42 patient(caucasian 9)
 coverage_cont = coverage_cont%>>%filter(coverage>max(coverage)/2)%>>%mutate(border=mean(coverage)-sd(coverage)*2) #exclude 65 patient (caucasian 30)
 
-coverage%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(all),sd(all)) #mean=313177, sd=10180
+coverage%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(all),sd(all)) #mean=312957, sd=10246
 .plot=coverage %>>%
   inner_join(patient_list%>>%filter(race=="white"))%>>%
   ggplot()+
@@ -114,7 +123,7 @@ coverage%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(
 .plot
 ggsave("~/Dropbox/work/rare_germ/figs/tdg_coverage.pdf",.plot,width = 10,height = 5)
 
-coverage_cont%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(coverage),sd(coverage)) #mean=518221 sd=24864
+coverage_cont%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(mean(coverage),sd(coverage)) #mean=517728 sd=24995
 .plot=coverage_cont %>>%
   inner_join(patient_list%>>%filter(race=="white"))%>>%
   ggplot()+

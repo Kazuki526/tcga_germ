@@ -49,6 +49,8 @@ while(<PLIST>){
 		}else{die "what patient? $line[$col{patient_id}] donot have tumor and bloodtumor?\n";}
 		if($ntumor !~ /^[0-9]+$/){ die "ERROR::$line[$col{patient_id}] have no tumor??\n";}
 		$patient_inf{$line[$col{patient_id}]}{cancer_type}= lc $line[$col{cancer_type}];
+		$patient_inf{$line[$col{patient_id}]}{race}=$line[$col{race}];
+		$patient_inf{$line[$col{patient_id}]}{age}=$line[$col{age}];
 		$patient_inf{$line[$col{patient_id}]}{gender}=$line[$col{gender}];
 		$patient_inf{$line[$col{patient_id}]}{nblood}=$nblood;
 		$patient_inf{$line[$col{patient_id}]}{nsolid}=$nsolid;
@@ -138,15 +140,15 @@ foreach my $CT (sort keys %bam_list_fordepth){
 		my @pid = split(/\t/,$bam_list_fordepth{$CT}{pid});
 		my @norm_bam = split(/\t/,$bam_list_fordepth{$CT}{norm_bam});
 		my $error="";
-#		foreach my $bam (@norm_bam){
-#				my $bam_check = &bam_check($bam);
-#				if($bam_check ne "ok"){$error=$bam;last;}
-#		}
+		foreach my $bam (@norm_bam){
+				my $bam_check = &bam_check($bam);
+				if($bam_check ne "ok"){$error=$bam;last;}
+		}
 		my @tumor_bam = split(/\t/,$bam_list_fordepth{$CT}{tumor_bam});
-#		foreach my $bam (@tumor_bam){
-#				my $bam_check = &bam_check($bam);
-#				if($bam_check ne "ok"){$error=$bam;last;}
-#		}
+		foreach my $bam (@tumor_bam){
+				my $bam_check = &bam_check($bam);
+				if($bam_check ne "ok"){$error=$bam;last;}
+		}
 		if($error=~/./){
 				if($max_processes >1){die "$CT:$error have error\nstop $CT make depth file\n";
 				}else{print "$CT:$error have error\nstop $CT make depth file\n";next;
@@ -334,7 +336,7 @@ foreach my $CT (sort keys %bam_list_fordepth){
 				print APCOV "$pid\toncogene/TSG\t".$patient_coverage{$pid}{'oncogene/TSG'}."\n";
 		}
 		close PCOV;
-		open(PDEP,">$patient_cov_file");
+		open(PDEP,">$patient_dep_file");
 		print PDEP "patient_id\trole\tnorm_depth\ttumor_depth\tlength_bp\n";
 		foreach my $pid(sort keys %patient_depth){
 				print PDEP  "$pid\tTSG\t$patient_depth{$pid}{TSG}{norm}\t$patient_depth{$pid}{TSG}{tumor}\t$patient_depth{$pid}{TSG}{bp}\n";

@@ -20,7 +20,7 @@ write_df= function(x, path, delim='\t', na='NA', append=FALSE, col_names=!append
 driver_genes=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/driver_genes.tsv")
 
 ####################################### TCGA data ########################################################
-patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
+patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
 norm_maf_all = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/norm_maf_all.tsv.gz")
 blood_maf_all = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/bloodnorm_maf_all.tsv.gz")
 tally_norm_maf = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/tally_norm_maf.tsv.gz")
@@ -72,7 +72,6 @@ somatic_recurrent = norm_maf_all%>>%
   dplyr::select(-n)
 
 #normalでaltalt, tumorでrefaltとなってる際にnormalでrefのdepth=0のものだけ採用！
-#また同じサイトでこのエラーが有意に多い(100patient以上の)siteは解析に使用しないことにした。(2site)
 varscan_error = norm_maf_all %>>%
   filter(LOH == "back_mutation", n_ref_count != 0) %>>%
   dplyr::rename(alt = n_allele2) %>>%
@@ -136,6 +135,8 @@ quality_filter= function(.data,.data_type="vcf",.fdr=0.01,.database="cancer",
     filter(if(.somatic==T){is.na(recurrent_focal)}else{chr==chr})%>>%
     dplyr::select(-recurrent_focal,-duplicate_focal)
 }
+QC_maf_norm =quality_filter(norm_maf_all,.data_type="maf",.varscan=T)
+write_df(QC_maf_norm,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/QC_norm_maf_all.tsv.gz")
 #########################################################################################################################
 #########################################################################################################################
 #########################################################################################################################
