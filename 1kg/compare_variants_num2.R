@@ -128,7 +128,8 @@ sample_tbl=
               right_join(tdg_1kg%>>%count(sample_id)%>>%dplyr::select(sample_id)) %>>%
               mutate_all(.funs = ~ifelse(is.na(.),0,.))%>>%
               tidyr::pivot_longer(col=-sample_id,names_to = "mutype",values_to = "MAC")%>>%
-              dplyr::rename(patient_id=sample_id)%>>%mutate(Database="1000 genomes",role="control"))
+              dplyr::rename(patient_id=sample_id)%>>%mutate(Database="1000 genomes",role="control"))%>>%
+  ungroup()
 #work flow 
 work_flow_tbl=sample_tbl %>>%mutate(role=ifelse(role=="control","Control genes","Top driver genes"))%>>%
   group_by(Database,patient_id,role)%>>%summarise(MAC=sum(MAC))%>>%ungroup()%>>%
@@ -221,6 +222,23 @@ work_flow_tbl=sample_tbl %>>%mutate(role=ifelse(role=="control","Control genes",
   cowplot::draw_label("c",x=0.52,y=0.98,size = 30)
 .plot
 ggsave("~/Dropbox/work/rare_germ/compare_analysis/compare_variants2.pdf",.plot,height = 7,width = 12)
+
+######### distribution ##########################
+.control_ave=sample_tbl%>>%filter(role=="control")%>>%
+  group_by(Database,mutype)%>>%summarise(cont_ave=mean(MAC)) %>>%ungroup
+sample_tbl %>>%filter(role=="TSG")%>>%
+  left_join(.control_ave)%>>%mutate(corrected_MAC=MAC/cont_ave) %>>%
+  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes")),
+         mutype=factor(ifelse(mutype=="missense","nonsynonymous",ifelse(mutype=="silent","synonymous",mutype)),
+                       levels=c("truncating","nonsynonymous","synonymous")))%>>%
+  ggplot(aes(x=corrected_MAC))+
+  geom_bar(aes(y=..prop..))+
+  facet_grid(Database ~ mutype,scales = "free")+
+  xlab("Correction value number of variants")+ylab("Proportion")+
+  theme_bw()
+ggsave("~/Dropbox/work/rare_germ/compare_analysis/MAC_correct_distribution.pdf",height = 4,width = 8)
+  
+
 
 
 #for table

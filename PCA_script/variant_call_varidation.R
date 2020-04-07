@@ -173,10 +173,11 @@ cont_bed = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_gene_ex
 Lu_maf_exon=Lu_maf%>>%mutate(posi_end=posi+str_length(ref)-1)%>>%
   left_join(tdg_bed)%>>%
   filter((start-3<=posi & posi<=end+2)|(start-3<=posi_end & posi_end<=end+2))%>>%dplyr::select(-start,-end)%>>%
+  mutate(role="TDG")%>>%
   bind_rows(Lu_maf_cont%>>%mutate(posi_end=posi+str_length(ref)-1)%>>%
-              left_join(cont_bed)%>>%
+              left_join(cont_bed)%>>%mutate(role="CG")%>>%
               filter((start-3<=posi & posi<=end+2)|(start-3<=posi_end & posi_end<=end+2))%>>%dplyr::select(-start,-end))%>>%
-  dplyr::select(patient_id,chr,posi,ref,allele1,allele2,filter,gene,mutype)%>>%
+  dplyr::select(patient_id,chr,posi,ref,allele1,allele2,filter,gene,mutype,role)%>>%
   tidyr::pivot_longer(cols = c(allele1,allele2),names_to = "allele",values_to = "alt")%>>%filter(ref!=alt)%>>%
   mutate(mutation_class=ifelse(ref=="-"|alt=="-","indel","SNV"))
 #before QC 
@@ -184,32 +185,40 @@ if(0){
 our_maf_exon = our_maf%>>%mutate(posi_end=posi+str_length(ref)-1)%>>%
   left_join(tdg_bed)%>>%
   filter((start-3<=posi & posi<=end+2)|(start-3<=posi_end & posi_end<=end+2))%>>%dplyr::select(-start,-end)%>>%
+  mutate(role="TDG")%>>%
   bind_rows(our_maf_cont%>>%mutate(posi_end=posi+str_length(ref)-1)%>>%
-              left_join(cont_bed)%>>%
+              left_join(cont_bed)%>>%mutate(role="CG")%>>%
               filter((start-3<=posi & posi<=end+2)|(start-3<=posi_end & posi_end<=end+2))%>>%dplyr::select(-start,-end))%>>%
-  inner_join(patient_for_vccheck) %>>% dplyr::select(patient_id,chr,posi,ref,allele1,allele2,FILTER,gene,mutype)%>>%
+  inner_join(patient_for_vccheck) %>>% dplyr::select(patient_id,chr,posi,ref,allele1,allele2,FILTER,gene,mutype,role)%>>%
   tidyr::pivot_longer(cols = c(allele1,allele2),names_to = "allele",values_to = "alt")%>>%filter(ref!=alt)%>>%
   mutate(mutation_class=ifelse(ref=="-"|alt=="-","indel","SNV"))
 
-pre_QC=Lu_maf_exon %>>%full_join(our_maf_exon)#%>>%filter(allele=="allele2")
+pre_QC=Lu_maf_exon %>>% full_join(our_maf_exon)
 pre_QC%>>%mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
   mutate(FILTER=ifelse(is.na(FILTER),NA,"called"))%>>%
-  count(mutation_class,filter,FILTER)
-#1 SNV            called called 4897829
-#2 SNV            called NA      473330
-#3 SNV            NA     called   43738
-#4 indel          called called   65862
-#5 indel          called NA       32334
-#6 indel          NA     called   12614
+  count(mutation_class,filter,FILTER)%>>%ungroup()%>>%group_by(mutation_class)%>>%mutate(freq=n/sum(n))
+#1 SNV            called called 4897829 0.905  
+#2 SNV            called NA      473330 0.0874 
+#3 SNV            NA     called   43738 0.00808
+######4 indel          called called   65862 0.594  
+######5 indel          called NA       32334 0.292  
+######6 indel          NA     called   12614 0.114  
 ##maybe indel calling was silipped, so we check whithout position infomation
 pre_QC_indel=Lu_maf_exon%>>%filter(mutation_class=="indel")%>>%dplyr::select(-posi) %>>%
   full_join(our_maf_exon%>>%filter(mutation_class=="indel")%>>%dplyr::select(-posi) )
 pre_QC_indel%>>%mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
   mutate(FILTER=ifelse(is.na(FILTER),NA,"called"))%>>%#inner_join(driver_genes,by=c("gene"="gene_symbol"))%>>%
-  count(mutation_class,filter,FILTER)
-#1 indel          called called 77214
-#2 indel          called NA     20982
-#3 indel          NA     called  1272
+  count(mutation_class,filter,FILTER)%>>%mutate(freq=n/sum(n))
+#1 indel          called called 77214 0.776 
+#2 indel          called NA     20982 0.211 
+#3 indel          NA     called  1272 0.0128
+pre_QC%>>%filter(mutation_class!="indel")%>>%bind_rows(pre_QC_indel)%>>%
+  mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
+  mutate(FILTER=ifelse(is.na(FILTER),NA,"called"))%>>%
+  count(filter,FILTER)%>>%mutate(freq=n/sum(n))
+#1 called called 4975043 0.902  
+#2 called NA      494312 0.0896 
+#3 NA     called   45010 0.00816
 }
 ### QC ######
 QC_maf_norm = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/QC_norm_maf_all.tsv.gz")%>>%inner_join(patient_for_vccheck)
@@ -231,22 +240,29 @@ our_maf_exon_QC = our_maf_QC%>>%mutate(posi_end=posi+str_length(ref)-1)%>>%
 QC_maf=Lu_maf_exon %>>%full_join(our_maf_exon_QC)
 QC_maf%>>%mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
   mutate(FILTER=ifelse(is.na(FILTER),NA,"called"))%>>%
-  count(mutation_class,filter,FILTER)
-"1 SNV            called called 4258334
- 2 SNV            called NA     1112825
- 3 SNV            NA     called   21936
- 4 indel          called called   29580
- 5 indel          called NA       68616
- 6 indel          NA     called     548"
+  count(mutation_class,filter,FILTER)%>>%ungroup()%>>%group_by(mutation_class)%>>%mutate(freq=n/sum(n))
+"1 SNV            called called 4258334 0.790  
+ 2 SNV            called NA     1112825 0.206  
+ 3 SNV            NA     called   21936 0.00407
+ 4 indel          called called   29580 0.300  
+ 5 indel          called NA       68616 0.695  
+ 6 indel          NA     called     548 0.00555"
 ##maybe indel calling was silipped, so we check whithout position infomation
 QC_indel=Lu_maf_exon%>>%filter(mutation_class=="indel")%>>%dplyr::select(-posi) %>>%
   full_join(our_maf_exon_QC%>>%filter(mutation_class=="indel")%>>%dplyr::select(-posi) )
-QC_indel%>>%#mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
+QC_indel%>>%mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
   mutate(FILTER=ifelse(is.na(FILTER),NA,"called"))%>>%#inner_join(driver_genes,by=c("gene"="gene_symbol"))%>>%
-  count(mutation_class,filter,FILTER)
-#1 indel          called called 29710
-#2 indel          called NA     68486
-#3 indel          NA     called   418
+  count(mutation_class,filter,FILTER)%>>%mutate(freq=n/sum(n))
+#1 indel          called called 29710 0.302
+#2 indel          called NA     68486 0.694  
+#3 indel          NA     called   418 0.00424
+QC_maf%>>%filter(mutation_class!="indel")%>>%bind_rows(QC_indel)%>>%
+  mutate(filter=ifelse(is.na(filter),NA,"called"))%>>%
+  mutate(FILTER=ifelse(is.na(FILTER),NA,"called"))%>>%
+  count(filter,FILTER)%>>%mutate(freq=n/sum(n))
+#1 called called 4288044 0.781  
+#2 called NA     1181311 0.215  
+#3 NA     called   22354 0.00407
 
 
 #########################################################################################
