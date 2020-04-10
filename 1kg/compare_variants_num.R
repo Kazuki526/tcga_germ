@@ -100,10 +100,12 @@ control_gnomad_white = read_tsv("/Volumes/DR8TB2/gnomAD/maf38/non_cancer_maf/non
     dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position,
                   ref=Reference_Allele,alt=Tumor_Seq_Allele2) %>>%
     mutate(chr=paste0("chr",chr))
+  write_df(maf_1kg_all,"/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/1kg_white_maf_all.tsv.gz")
   maf_1kg_cont=strip_maf("/Volumes/areca42TB2/1000genomes/GRCh38/control_genes//white_by_sample_control_genes.maf.gz")%>>%
     dplyr::rename(gene_symbol=Hugo_Symbol,chr=Chromosome,start=Start_Position,end=End_Position,
                   ref=Reference_Allele,alt=Tumor_Seq_Allele2) %>>%
     mutate(chr=paste0("chr",chr))
+  write_df(maf_1kg_cont,"/Volumes/DR8TB2/tcga_rare_germ/control_gene/1kg_white_maf_all.tsv.gz")
   sample_1kg_list=count(maf_1kg_all,sample_id)%>>%dplyr::select(-n)
   ref_minor_convert=function(.data){
     sample_1kg_list%>>%mutate(allele1="a",allele2="a")%>>%

@@ -40,50 +40,6 @@ control_1kg=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene//1kg_white_maf
 tdg_gnomad_white=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/gnomAD_white_maf.tsv.gz")%>>%anti_join(inconsistent_site)
 control_gnomad_white=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/gnomAD_white_maf.tsv.gz")%>>%anti_join(inconsistent_site)
 
-######################################## variants count #############################################
-#variant count by patient 
-sample_num_cancer_tdg=count(patient_hicov%>>%filter(race=="white"))$n
-sample_num_cancer_cont=count(patient_hicov%>>%filter(race=="white"))$n
-tdg_cancer = white_maf_for_cumulative %>>%inner_join(patient_hicov)%>>%inner_join(driver_genes)%>>%
-  dplyr::select(patient_id,gene_symbol,chr,start,ref,alt,mutype,MAF,MAC)%>>%anti_join(inconsistent_site)
-control_cancer = white_maf_for_cumulative_cont %>>%inner_join(patient_hicov)%>>%inner_join(control_genes)%>>%
-  dplyr::select(patient_id,gene_symbol,chr,start,ref,alt,mutype,MAF,MAC)%>>%anti_join(inconsistent_site)
-count_variant=function(.MAF){
-  if((.MAF*10000) %% 100 == 0){print(paste0("doing MAF=",.MAF))}
-  tibble(cancer=tdg_cancer%>>%filter(MAF<=.MAF)%>>%{sum(.$MAC)/sample_num_cancer_tdg},
-         kg = tdg_1kg%>>%filter(MAF<=.MAF)%>>%{sum(.$MAC)/sample_num_1kg},
-         gnomad=tdg_gnomad_white%>>%filter(MAF<=.MAF)%>>%{sum(.$AF_white)})%>>%
-    tidyr::pivot_longer(cols = c("cancer","kg","gnomad"),names_to="Database",values_to="Average number of variants")%>>%
-    mutate(role="Top driver genes")%>>%
-    bind_rows(tibble(cancer=control_cancer%>>%filter(MAF<=.MAF)%>>%{sum(.$MAC)/sample_num_cancer_cont},
-                     kg = control_1kg%>>%filter(MAF<=.MAF)%>>%{sum(.$MAC)/sample_num_1kg},
-                     gnomad=control_gnomad_white%>>%filter(MAF<=.MAF)%>>%{sum(.$AF_white)})%>>%
-                tidyr::pivot_longer(cols = c("cancer","kg","gnomad"),names_to="Database",values_to="Average number of variants")%>>%
-                mutate(role="Control genes"))
-}
-if(0){
-  count_variantions_10 = tibble::tibble(MAF=1:1000) %>>%
-    mutate(MAF = MAF/10000) %>>%
-    mutate(variants = purrr::map(MAF,~count_variant(.)))
-  count_variantions_10_50 = tibble::tibble(MAF=100:500) %>>%
-    mutate(MAF = MAF/1000) %>>%
-    mutate(variants = purrr::map(MAF,~count_variant(.)))
-  bind_rows(count_variantions_10,count_variantions_10_50)%>>%unnest()%>>%
-    write_df("/Volumes/DR8TB2/tcga_rare_germ/counts_variant.tsv")
-}
-##### compare variants nums by database ####
-variant_dif=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/counts_variant.tsv")%>>%
-  mutate(Database = ifelse(Database=="kg","1000 genomes",
-                           ifelse(Database=="cancer","TCGA","gnomAD non-cancer")))%>>%
-  mutate(Database = factor(Database,levels = c("TCGA","1000 genomes","gnomAD non-cancer")))%>>%
-  filter(Database != "gnomAD non-cancer")
-.plot_all=variant_dif%>>%
-  mutate(MAF=MAF*100,facet=factor(role,levels=c("Top driver genes","Control genes")))%>>%
-  ggplot()+
-  geom_point(aes(x=MAF,y=`Average number of variants`,color=Database))+
-  facet_wrap(~facet,scales = "free")+
-  theme_bw()
-.plot_all
 ################################### compare TDG variants nums corrected by CG  ####################################
 driver_genes_2type = driver_genes %>>%
   mutate(role=ifelse(role=="oncogene/TSG","TSG",role))%>>%
@@ -129,72 +85,52 @@ sample_tbl=
               tidyr::pivot_longer(col=-sample_id,names_to = "mutype",values_to = "MAC")%>>%
               dplyr::rename(patient_id=sample_id)%>>%mutate(Database="1000 genomes",role="control"))%>>%
   ungroup()
-#work flow 
-work_flow_tbl=sample_tbl %>>%mutate(role=ifelse(role=="control","Control genes","Top driver genes"))%>>%
-  group_by(Database,patient_id,role)%>>%summarise(MAC=sum(MAC))%>>%ungroup()%>>%
-  group_by(Database,role)%>>%summarise(mean=mean(MAC),sd=sd(MAC))%>>%ungroup()%>>%
-  bind_rows(tibble(Database="gnomAD non-cancer",role=c("Top driver genes","Control genes"),
-                   mean=c(tdg_gnomad_white%>>%filter(mutype!="inframe_indel",AF_white<.MAF)%>>%{sum(.$AF_white)*2},
-                          control_gnomad_white%>>%filter(mutype!="inframe_indel",AF_white<.MAF)%>>%{sum(.$AF_white)*2})))%>>%
-  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes","gnomAD non-cancer")),
-         role=factor(role,levels=c("Top driver genes","Control genes")))
-.plot_befcor = work_flow_tbl %>>%                                filter(Database!="gnomAD non-cancer")%>>%
-  ggplot(aes(x=Database,y=mean,fill=role))+
-  geom_bar(stat= "identity",position="dodge")+
-  geom_errorbar(aes(ymin=ifelse(mean-sd<0,0,mean-sd), ymax=mean + sd, width=0.2),position=position_dodge(width = 0.9))+
-  scale_fill_manual(values=c(`Top driver genes`="#d95f02",`Control genes`="#7fc97f"))+
-  theme_bw()+ylab("Average of individual variants number")
-.plot_corect = work_flow_tbl %>>%                                filter(Database!="gnomAD non-cancer")%>>%
-  group_by(Database)%>>%
-  mutate(sd= sd/max(mean),mean=mean/max(mean))%>>%ungroup()%>>%
-  ggplot(aes(x=Database,y=mean,fill=role))+
-  geom_bar(stat= "identity",position="dodge")+
-  geom_errorbar(aes(ymin=ifelse(mean-sd<0,0,mean-sd), ymax=mean + sd, width=0.2),position=position_dodge(width = 0.9))+
-  scale_fill_manual(values=c(`Top driver genes`="#d95f02",`Control genes`="#7fc97f"))+
-  theme_bw()+geom_hline(yintercept = 1,color="red")+
-  ylab("Correction value")
-.legend=cowplot::get_legend(.plot_corect)
-.plot_workflow=cowplot::plot_grid(.plot_befcor+theme(legend.position = "none",axis.title.x = element_blank()),
-                                  cowplot::plot_grid(.legend,NULL,nrow = 2,rel_heights = c(1,2)),
-                                  .plot_corect+theme(legend.position = "none",axis.title.x = element_blank()),NULL,
-                                  nrow=1,rel_widths = c(2.1,1.2,2,0.5))
-.plot_workflow
-
-.plot_tsg=sample_tbl %>>%filter(role!="oncogene")%>>%
+# before correct
+.plot_tsg_bef=sample_tbl %>>%filter(role!="oncogene")%>>%
   group_by(Database,role,mutype)%>>%summarise(mean=mean(MAC),sd=sd(MAC))%>>%ungroup()%>>%
-  bind_rows(tdg_gnomad_white%>>%inner_join(driver_genes_2type%>>%filter(role=="TSG"))%>>%
-              filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
-              mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
-              group_by(role,mutype)%>>%summarise(mean=sum(AF_white))%>>%
-              full_join(control_gnomad_white%>>%inner_join(control_genes)%>>%
-                          filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
-                          mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
-                          group_by(role,mutype)%>>%summarise(mean=sum(AF_white)))%>>%
-              mutate(Database="gnomAD non-cancer"))%>>%
   mutate(Database=factor(Database,levels = c("TCGA","1000 genomes","gnomAD non-cancer")),
          role=factor(ifelse(role=="TSG",role,"Control genes"),levels=c("TSG","Control genes")),
          mutype=factor(ifelse(mutype=="missense","nonsynonymous",ifelse(mutype=="silent","synonymous",mutype)),
                        levels=c("truncating","nonsynonymous","synonymous")))%>>%ungroup()%>>%
-  group_by(Database,mutype)%>>%
-  mutate(sd= sd/max(mean),mean=mean/max(mean))%>>%ungroup()%>>%                             filter(Database!="gnomAD non-cancer")%>>%
   ggplot(aes(x=Database,y=mean,fill=role))+
   geom_bar(stat= "identity",position="dodge")+
   geom_errorbar(aes(ymin=ifelse(mean-sd<0,0,mean-sd), ymax=mean + sd, width=0.2),position=position_dodge(width = 0.9))+
-  facet_grid(.~mutype)+
+  facet_wrap(.~mutype,scales = "free")+scale_fill_manual(values=c(TSG="#beaed4",`Control genes`="#7fc97f"))+
+  theme_bw()
+.plot_oncg_bef=sample_tbl %>>%filter(role!="TSG")%>>%
+  group_by(Database,role,mutype)%>>%summarise(mean=mean(MAC),sd=sd(MAC))%>>%ungroup()%>>%
+  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes")),
+         role=factor(ifelse(role=="oncogene","Oncogene","Control genes"),levels=c("Oncogene","Control genes")),
+         mutype=factor(ifelse(mutype=="missense","nonsynonymous",ifelse(mutype=="silent","synonymous",mutype)),
+                       levels=c("truncating","nonsynonymous","synonymous")))%>>%ungroup()%>>%
+  ggplot(aes(x=Database,y=mean,fill=role))+
+  geom_bar(stat= "identity",position="dodge")+
+  geom_errorbar(aes(ymin=ifelse(mean-sd<0,0,mean-sd), ymax=mean + sd, width=0.2),position=position_dodge(width = 0.9))+
+  facet_wrap(.~mutype,scales = "free")+scale_fill_manual(values=c(Oncogene="#fdc086",`Control genes`="#7fc97f"))+
+  theme_bw()
+.plot_bef=cowplot::ggdraw()+
+  cowplot::draw_plot(.plot_tsg_bef+theme(axis.title = element_blank(),axis.text.x = element_text(angle = -15,vjust = 0.5)),
+                     x=0.04,y=0.5,width=0.96,height=0.5)+
+  cowplot::draw_plot(.plot_oncg_bef+theme(axis.title = element_blank(),axis.text.x = element_text(angle = -15,vjust = 0.5)),
+                     x=0.04,y=0,width=0.96,height=0.5)+
+  cowplot::draw_text("Average number of variants",x=0.02,angle=90)
+# corrected
+.plot_tsg=sample_tbl %>>%filter(role!="oncogene")%>>%
+  group_by(Database,role,mutype)%>>%summarise(mean=mean(MAC),sd=sd(MAC))%>>%ungroup()%>>%
+  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes")),
+         role=factor(ifelse(role=="TSG",role,"Control genes"),levels=c("TSG","Control genes")),
+         mutype=factor(ifelse(mutype=="missense","nonsynonymous",ifelse(mutype=="silent","synonymous",mutype)),
+                       levels=c("truncating","nonsynonymous","synonymous")))%>>%ungroup()%>>%
+  group_by(Database,mutype)%>>%
+  mutate(sd= sd/max(mean),mean=mean/max(mean))%>>%ungroup()%>>%
+  ggplot(aes(x=Database,y=mean,fill=role))+
+  geom_bar(stat= "identity",position="dodge")+
+  geom_errorbar(aes(ymin=ifelse(mean-sd<0,0,mean-sd), ymax=mean + sd, width=0.2),position=position_dodge(width = 0.9))+
   facet_grid(.~mutype)+scale_fill_manual(values=c(TSG="#beaed4",`Control genes`="#7fc97f"))+
   theme_bw()+geom_hline(yintercept = 1,color="red")
 .plot_oncg=sample_tbl %>>%filter(role!="TSG")%>>%
   group_by(Database,role,mutype)%>>%summarise(mean=mean(MAC),sd=sd(MAC))%>>%ungroup()%>>%
-  bind_rows(tdg_gnomad_white%>>%inner_join(driver_genes_2type%>>%filter(role=="oncogene"))%>>%
-              filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
-              mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
-              group_by(role,mutype)%>>%summarise(mean=sum(AF_white))%>>%
-              full_join(control_gnomad_white%>>%inner_join(control_genes)%>>%
-                          filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
-                          mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
-                          group_by(role,mutype)%>>%summarise(mean=sum(AF_white)))%>>%
-              mutate(Database="gnomAD non-cancer"))%>>%
-  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes","gnomAD non-cancer")),
+  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes")),
          role=factor(ifelse(role=="oncogene","Oncogene","Control genes"),levels=c("Oncogene","Control genes")),
          mutype=factor(ifelse(mutype=="missense","nonsynonymous",ifelse(mutype=="silent","synonymous",mutype)),
                        levels=c("truncating","nonsynonymous","synonymous")))%>>%ungroup()%>>%
@@ -211,16 +147,9 @@ work_flow_tbl=sample_tbl %>>%mutate(role=ifelse(role=="control","Control genes",
   cowplot::draw_plot(.plot_oncg+theme(axis.title = element_blank(),axis.text.x = element_text(angle = -15,vjust = 0.5)),
                      x=0.04,y=0,width=0.96,height=0.5)+
   cowplot::draw_text("Correction value of average number of variants",x=0.02,angle=90)
-.plot_compare
-.plot=cowplot::ggdraw()+
-  cowplot::draw_plot(.plot_all,y=0.5,width = 0.5,height = 0.5)+
-  cowplot::draw_plot(.plot_workflow,width = 0.5,height = 0.5)+
-  cowplot::draw_plot(.plot_compare,x=0.5,width = 0.5)+
-  cowplot::draw_label("a",x=0.02,y=0.98,size = 30)+
-  cowplot::draw_label("b",x=0.02,y=0.48,size = 30)+
-  cowplot::draw_label("c",x=0.52,y=0.98,size = 30)
+.plot=cowplot::plot_grid(.plot_bef,NULL,.plot_compare,ncol = 1,rel_heights = c(1,0.2,1),labels = c("a",NA,"b"))
 .plot
-ggsave("~/Dropbox/work/rare_germ/compare_analysis/compare_variants2.pdf",.plot,height = 7,width = 12)
+ggsave("~/Dropbox/work/rare_germ/compare_analysis/compare_variants3.pdf",.plot,height = 12,width = 7)
 
 ######### distribution ##########################
 .control_ave=sample_tbl%>>%filter(role=="control")%>>%
@@ -236,7 +165,7 @@ sample_tbl %>>%filter(role=="TSG")%>>%
   xlab("Correction value number of variants")+ylab("Proportion")+
   theme_bw()
 ggsave("~/Dropbox/work/rare_germ/compare_analysis/MAC_correct_distribution.pdf",height = 4,width = 8)
-  
+
 
 
 
@@ -258,6 +187,25 @@ sample_tbl %>>%
                        levels=c("truncating","nonsynonymous","synonymous")))%>>%
   arrange(Database,role,mutype)%>>%
   write_df("~/Dropbox/work/rare_germ/compare_analysis/compare_variants.tsv")
+sample_tbl %>>%
+  group_by(Database,role,mutype)%>>%summarise(mean=mean(MAC),sd=sd(MAC))%>>%ungroup()%>>%
+  bind_rows(tdg_gnomad_white%>>%inner_join(driver_genes_2type)%>>%
+              filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
+              mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
+              group_by(role,mutype)%>>%summarise(mean=sum(AF_white))%>>%
+              full_join(control_gnomad_white%>>%inner_join(control_genes)%>>%
+                          filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
+                          mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
+                          group_by(role,mutype)%>>%summarise(mean=sum(AF_white)))%>>%
+              mutate(Database="gnomAD non-cancer"))%>>%(?.)%>>%
+  mutate(Database=factor(Database,levels = c("TCGA","1000 genomes","gnomAD non-cancer")),
+         role=factor(ifelse(role=="control","Control genes",role),levels=c("TSG","oncogene","Control genes")),
+         mutype=factor(ifelse(mutype=="missense","nonsynonymous",ifelse(mutype=="silent","synonymous",mutype)),
+                       levels=c("truncating","nonsynonymous","synonymous")))%>>%
+  arrange(Database,role,mutype)%>>%
+  mutate(mean_sd=paste0(round(mean,digits=3)," (",round(sd,digits=3),")"))%>>%dplyr::select(-mean,-sd)%>>%
+  tidyr::pivot_wider(names_from = "mutype",values_from = "mean_sd")%>>%
+  write_df("~/Dropbox/work/rare_germ/compare_analysis/compare_variants_spread.tsv")
 
 
 ###### permutation test #######
@@ -288,9 +236,50 @@ permutation_tbl%>>%
   left_join(observed_data)%>>%
   filter(perm_dif<observed_dif)%>>%
   count(role,mutype)
-#1 TSG      missense    9218
-#2 TSG      silent      2671
-#3 TSG      truncating  3018
-#4 oncogene missense    8253
-#5 oncogene silent      4359
-#6 oncogene truncating  8103
+#1 TSG      missense    8679
+#2 TSG      silent      1982
+#3 TSG      truncating  2433
+#4 oncogene missense    7875
+#5 oncogene silent      3730
+#6 oncogene truncating  7992
+
+
+###########################################################################################################
+############ by gene ###########
+count_by_gene = function(.tbl,.database="tcga"){
+  if(.database=="tcga"){
+    patient_hicov%>>%filter(race=="white")%>>%dplyr::select(patient_id)%>>%
+      left_join(.tbl)%>>%mutate_all(.funs = ~ifelse(is.na(.),0,.))%>>%
+      summarise(`TCGA truncating`   =paste0(round(mean(truncating),digits=3),"(",round(sd(truncating),digits=3),")"),
+                `TCGA nonsynonymous`=paste0(round(mean(missense),digits=3),  "(",round(sd(missense),digits=3),  ")"),
+                `TCGA synonymous`   =paste0(round(mean(silent),digits=3),    "(",round(sd(silent),digits=3),    ")"))
+  }else{
+    tdg_1kg%>>%count(sample_id)%>>%dplyr::select(sample_id)%>>%
+      left_join(.tbl)%>>%mutate_all(.funs = ~ifelse(is.na(.),0,.))%>>%
+      summarise(`1000 genomes truncating`   =paste0(round(mean(truncating),digits=3),"(",round(sd(truncating),digits=3),")"),
+                `1000 genomes nonsynonymous`=paste0(round(mean(missense),digits=3),  "(",round(sd(missense),digits=3),  ")"),
+                `1000 genomes synonymous`   =paste0(round(mean(silent),digits=3),    "(",round(sd(silent),digits=3),    ")"))
+  }
+}
+white_maf_for_cumulative%>>%inner_join(patient_hicov%>>%dplyr::select(patient_id))%>>%
+  filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
+  mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
+  inner_join(driver_genes)%>>%
+  group_by(patient_id,mutype,gene_symbol,role)%>>%
+  summarise(MAC=sum(MAC))%>>%tidyr::pivot_wider(names_from = "mutype",values_from = "MAC")%>>%
+  ungroup()%>>%nest(patient_id, silent, missense, truncating)%>>%
+  mutate(tcga_count=purrr::map(data,~count_by_gene(.)))%>>%dplyr::select(-data)%>>%
+  unnest()%>>%
+  left_join(tdg_1kg%>>%filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
+              mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
+              inner_join(driver_genes_2type)%>>%
+              group_by(sample_id,mutype,role,gene_symbol)%>>%
+              summarise(MAC=sum(MAC))%>>%tidyr::pivot_wider(names_from = "mutype",values_from = "MAC")%>>%
+              ungroup()%>>%nest(sample_id, silent, missense, truncating)%>>%
+              mutate(kg_count=purrr::map(data,~count_by_gene(.,.database="1kg")))%>>%dplyr::select(-data)%>>%
+              unnest())%>>%
+  left_join(driver_genes)%>>%
+  mutate_all(~ifelse(is.na(.),"0(0)",.))%>>%
+  arrange(role,gene_symbol)%>>%
+  write_df("~/Dropbox/work/rare_germ/compare_analysis/compare_variants_spread_bygene.tsv")
+  

@@ -19,7 +19,7 @@ options(scipen=100)
 
 driver_genes=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/driver_genes.tsv")
 patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")
-patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv")
+patient_hicov = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv",col_types = "cciciiiic")
 patient_with_ps = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_with_ps.tsv")
 
 ################ read MAF extracted ################

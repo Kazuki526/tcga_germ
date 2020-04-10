@@ -99,7 +99,7 @@ truncate_plot_allcantype= function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
 #####################################################################################################################
 cumulative_plot_cont = function(.maf=all_maf_for_cumulative_cont,.MAF_start = 0,.mutype="missense",
                                 .MAF_end, .facet_by_cancer_type = F, .by_gene = F, .more_1par = F,
-                                .race="all_race",.title=F,.patient_list=patient_cont,
+                                .race="all_race",.title=F,.patient_list=patient_hicov,
                                 .regression_size = 7,.pnum_size = 4,.save = T,.no_trunc = F,
                                 .permu=T,.test_tail="one",.permu_file=NA,.all_color="black"){
   #violin plot する際変異の最大数までに間が空いてしまう時に空の行を挿入するfunction
@@ -312,7 +312,7 @@ cumulative_plot_cont = function(.maf=all_maf_for_cumulative_cont,.MAF_start = 0,
 make_regression_tabel_trunc_cont = function(.maf=all_maf_for_cumulative_cont,.vcf=control_gnomad,.race="all",
                                       .fdr=0.01,.max_maf=50,.filter_maf=F,
                                       .database="cancer",.duplicate=T,.somatic=T,.varscan=T,
-                                      .patient_list=patient_cont){
+                                      .patient_list=patient_hicov){
   regression_out = function(.minor_allele_frequency,.maf,.patient_list){
     if((.minor_allele_frequency*10000) %% 100 == 0){print(paste0("doing MAF=",.minor_allele_frequency*100))}
     ##missense の数
@@ -356,7 +356,7 @@ make_regression_tabel_trunc_cont = function(.maf=all_maf_for_cumulative_cont,.vc
 make_regression_tabel_cont = function(.maf=all_maf_for_cumulative_cont,.vcf=control_gnomad,.race="all",
                                       .fdr=0.01,.mutype="missense",.max_maf=50,.filter_maf=F,
                                       .database="all",.duplicate=T,.somatic=T,.varscan=T,
-                                      .patient_list=patient_cont,.no_trunc=F){
+                                      .patient_list=patient_hicov,.no_trunc=F){
   regression_out = function(.minor_allele_frequency,.maf,.patient_list){
     if((.minor_allele_frequency*10000) %% 100 == 0){print(paste0("doing MAF=",.minor_allele_frequency*100))}
     ##missense の数

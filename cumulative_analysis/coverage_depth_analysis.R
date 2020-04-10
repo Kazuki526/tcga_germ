@@ -26,9 +26,8 @@ driver_genes=read_tsv("~/git/driver_genes/driver_genes.tsv")%>>%
 control_genes = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_genes.tsv")
 
 ####################################### TCGA data ########################################################
-patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv")#%>>%filter(!is.na(age))%>>%mutate(age = age/365.25)
-patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv")
-patient_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv")
+patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")#%>>%filter(!is.na(age))%>>%mutate(age = age/365.25)
+patient_hicov = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv",col_types = "cciciiiic")
 
 all_maf_for_cumulative = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/all_maf_for_cumulative.tsv.gz")%>>%filter(chr!="chrX",FILTER=="PASS")
 white_maf_for_cumulative = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/white_maf_for_cumulative.tsv.gz")%>>%filter(chr!="chrX",FILTER=="PASS")
@@ -45,7 +44,7 @@ depth_cont = read_tsv("/Volumes/areca42TB2/gdc/control_region/all_patient/patien
 coverage %>>%mutate(TSG=TSG+`oncogene/TSG`,oncogene=oncogene+`oncogene/TSG`)%>>%
   dplyr::select(patient_id,TSG,oncogene)%>>%
   tidyr::gather(role,coverage,TSG,oncogene) %>>%
-  right_join(patient_tdg)%>>%mutate(age=age/365.25)%>>%
+  right_join(patient_hicov)%>>%mutate(age=age/365.25)%>>%
   ggplot(aes(x=coverage,y=age))+
   geom_point()+
   facet_grid(.~role,scales = "free")+
@@ -60,11 +59,11 @@ coverage %>>%mutate(TSG=TSG+`oncogene/TSG`,oncogene=oncogene+`oncogene/TSG`)%>>%
          oncogene=(depth_oncogene+`depth_oncogene/TSG`)/(length_bp_oncogene+`length_bp_oncogene/TSG`))%>>%
   dplyr::select(patient_id,tn,TSG,oncogene)%>>%
   tidyr::pivot_longer(cols=c(TSG,oncogene),names_to = "role",values_to = "mean_depth")%>>%
-  right_join(patient_tdg)%>>%
+  right_join(patient_hicov)%>>%
   bind_rows(depth_cont%>>%
               tidyr::pivot_longer(cols=c(norm_depth,tumor_depth),names_to="tn",values_to="depth")%>>%
               mutate(mean_depth=depth/length_bp)%>>%dplyr::select(-depth,-length_bp)%>>%
-              right_join(patient_cont))%>>%
+              right_join(patient_hicov))%>>%
   mutate(age=age/365.25,tn=ifelse(tn=="norm_depth","Normal sample","Tumor sample"))%>>%
   ggplot(aes(x=mean_depth,y=age))+
   geom_point(size=0.1)+
@@ -100,7 +99,7 @@ make_coverage_regression_tabel = function(.role = "TSG",.race="white",.mutype="m
       left_join(driver_genes %>>%dplyr::select(gene_symbol,role), by = "gene_symbol") %>>%
       filter(role==.role | role=="oncogene/TSG")%>>%
       count(patient_id) %>>% dplyr::select(-n)
-    .patient_list = patient_tdg %>>%filter(race==.race)%>>%
+    .patient_list = patient_hicov %>>%filter(race==.race)%>>%
       anti_join(truncating_patients,by="patient_id")%>>%
       left_join(coverage,by="patient_id")%>>%
       mutate(age=age/365.25,coverage=(get(.role)+`oncogene/TSG`)/1000000)%>>%
@@ -111,7 +110,7 @@ make_coverage_regression_tabel = function(.role = "TSG",.race="white",.mutype="m
       filter(role==.role | role=="oncogene/TSG")%>>%
       dplyr::select(patient_id,MAF,MAC)
   }else if(.role=="control"){
-    .patient_list = patient_cont %>>%filter(race == .race) %>>%
+    .patient_list = patient_hicov %>>%filter(race == .race) %>>%
       left_join(coverage_cont,by="patient_id")%>>%
       mutate(age=age/365.25,coverage=coverage/1000000)%>>%
       dplyr::select(patient_id,age,coverage)

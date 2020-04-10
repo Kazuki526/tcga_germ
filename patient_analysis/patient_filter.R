@@ -74,15 +74,6 @@ patient_info %>>%count(cancer_type,gender) %>>%
   dplyr::select(cancer_type,female,male,`mean age of onset`,`sd age of onset`,n)%>>%
   write_df("~/Dropbox/work/rare_germ/patient_info_table.tsv",na="-")
 
-#patient list 
-patient_list %>>%filter(!is.na(age))%>>%
-  mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"), age = round(age/365.25,digit=2)) %>>%
-  mutate_all(~ifelse(is.na(.),0,.)) %>>%filter(race=="white")%>>%
-  dplyr::select(cancer_type,patient_id,gender,age,bloodnorm,solidnorm,tumor,bloodtumor)%>>%
-  arrange(cancer_type,patient_id)%>>%
-  write_df("~/Dropbox/work/rare_germ/patient_list_S3.tsv")
-
-
 #age distribution plot
 pcount=patient_list%>>%filter(!is.na(age),race=="white")%>>%
   group_by(cancer_type)%>>%summarise(n=n(),age=mean(age))%>>%
@@ -98,7 +89,24 @@ patient_list%>>%filter(!is.na(age),race=="white")%>>%
   ylab("Age of Onset")+xlab("TCGA Cancer Type")+
   theme_bw()+theme(axis.text.x = element_text(angle = 90))
 ggsave("~/Dropbox/work/rare_germ/figs/cancer_type_age_plot.pdf",width = 10,height = 4)
-
+################################################################################################################################
+# filter out low coverage patients strong driver gene
+coverage=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/coverage.tsv.gz") 
+patient_tdg = patient_list %>>%
+  left_join(coverage%>>%dplyr::select(patient_id,all))%>>%
+  filter(all > (max(all,na.rm = T)/2))%>>%
+  mutate(border=mean(all)-sd(all)*2)%>>%
+  filter(all>border)%>>%dplyr::select(-all,-border)
+# filter out low coverage patients control genes
+coverage_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/coverage_cont.tsv.gz") 
+patient_cont = patient_list %>>%
+  left_join(coverage_cont%>>%dplyr::select(patient_id,coverage))%>>%
+  filter(coverage>max(coverage)/2)%>>%
+  mutate(border=mean(coverage)-sd(coverage)*2)%>>%
+  filter(coverage>border)%>>%dplyr::select(-coverage,-border)
+patient_tdg %>>%inner_join(patient_cont)%>>%
+  write_df("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv")
+patient_hicov = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv",col_types = "cciciiiic")
 #################################################################################################################
 ########## by patient coverage plot
 patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv",col_types = "cciciiiic")
@@ -133,3 +141,16 @@ coverage_cont%>>%inner_join(patient_list%>>%filter(race=="white"))%>>%summarise(
   theme_bw()
 .plot
 ggsave("~/Dropbox/work/rare_germ/figs/cont_coverage.pdf",.plot,width = 10,height = 5)
+#################################################################################################################
+#patient list 
+patient_list %>>%filter(!is.na(age))%>>%
+  mutate(cancer_type=str_extract(cancer_type,"[A-Z]+$"), age = round(age/365.25,digit=2)) %>>%
+  mutate_all(~ifelse(is.na(.),0,.)) %>>%filter(race=="white")%>>%
+  dplyr::select(cancer_type,patient_id,gender,age,bloodnorm,solidnorm,tumor,bloodtumor)%>>%
+  arrange(cancer_type,patient_id)%>>%
+  left_join(patient_hicov%>>%dplyr::select(patient_id)%>>%mutate(coverage="enough"))%>>%
+  mutate(coverage=ifelse(is.na(coverage),"low coverage",""))%>>%
+  write_df("~/Dropbox/work/rare_germ/patient_list_S3.tsv")
+
+
+

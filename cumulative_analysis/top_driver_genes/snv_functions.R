@@ -4,7 +4,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
                            .MAF_start = 0,.mutype="missense",.role="TSG",.blood=F,
                            .facet_by_cancer_type = F, .by_gene = F, .more_5par = F,.race="all_race",
                            .regression_size = 7,.pnum_size = 4,.save = T,.pathogenic = F,
-                           .patient_list=patient_tdg,.height=8,.width=8,.reg_file="",
+                           .patient_list=patient_hicov,.height=8,.width=8,.reg_file="",
                            .permu=T,.test_tail="one",.permu_file=NA,.all_color="black"){
   #指数表記
   exponent_notation = function(.num){
@@ -252,7 +252,7 @@ cumulative_plot = function(.maf=all_maf_for_cumulative,.MAF_end,.title=F,
 make_regression_tabel = function(.maf=all_maf_for_cumulative,.vcf=tdg_gnomad,.race="all",.role = "TSG",
                                  .fdr=0.01,.mutype="missense",.max_maf=50,.maf_filter=F,
                                  .database="all",.duplicate=T,.somatic=T,.varscan=T,.pathogenic = F,
-                                 .patient_list = patient_tdg,.remove0=F){
+                                 .patient_list = patient_hicov,.remove0=F){
   regression_out = function(.class,.maf,.role,.patient_list){
     if((.class*10000) %% 100 == 0){print(paste0("doing MAF=",.class*100))}
     ##missense の数

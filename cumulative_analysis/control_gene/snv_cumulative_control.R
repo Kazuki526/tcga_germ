@@ -23,7 +23,7 @@ control_genes = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_ge
 
 ####################################### TCGA data ############################################
 patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
-patient_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv",col_types = "cciciiiic")
+patient_hicov = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv",col_types = "cciciiiic")
 all_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/all_maf_for_cumulative_control.tsv.gz")
 white_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/white_maf_for_cumulative_control.tsv.gz")
 ##################################### gnomAD data #############################################
@@ -39,7 +39,7 @@ truncating_count_cont_rare = all_maf_for_cumulative_cont %>>%
   inner_join(control_genes%>>%dplyr::select(gene_symbol))%>>%
   #count(cancer_type,patient_id,gene_symbol) %>>%dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
-  right_join(patient_cont)%>>%
+  right_join(patient_hicov)%>>%
   mutate(age=round(age/365.25*100)/100) %>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
 #missense
@@ -76,7 +76,7 @@ truncating_count_cont_rare_white = white_maf_for_cumulative_cont %>>%
   inner_join(control_genes%>>%dplyr::select(gene_symbol))%>>%
   #count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
-  right_join(patient_cont)%>>%filter(race=="white",!is.na(age))%>>%
+  right_join(patient_hicov)%>>%filter(race=="white",!is.na(age))%>>%
   mutate(age=round(age/365.25*100)/100) %>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
 
@@ -98,12 +98,14 @@ cumulative_plot_cont(.maf=white_maf_for_cumulative_cont,.race = "white",
 
 
 ######## by cancer type #######
+if(0){
 cumulative_plot_cont(.maf=white_maf_for_cumulative_cont,.race = "white",
                      .MAF_end = 0.05, .more_1par = T,.facet_by_cancer_type=T,
                      .permu_file = "white/missense005_byCT_white.tsv",.title = T)
 cumulative_plot_cont(.maf=white_maf_for_cumulative_cont,.race = "white",
                      .MAF_end = 0.05, .more_1par = F,.mutype = "silent",.facet_by_cancer_type=T,
                      .permu_file = "white/silent005_byCT_white.tsv",.title = T)
+}
 #####################################################################################################
 # MAF 0.01%ごとに
 if(1){

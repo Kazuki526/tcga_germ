@@ -32,8 +32,7 @@ read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/control_gene_cds.bed",col_
 }
 ####################################### TCGA data ########################################################
 patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
-patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv",col_types = "cciciiiic")
-patient_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv",col_types = "cciciiiic")
+patient_hicov = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv",col_types = "cciciiiic")
 norm_maf_all = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/norm_maf_all.tsv.gz")
 norm_maf_all_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/norm_maf_all_cont.tsv.gz")
 
@@ -122,7 +121,7 @@ norm_variant =norm_maf_all %>>%
   mutate(vclass=ifelse(ref=="-"|alt=="-","indel","SNV"),role="TDG")%>>%
   dplyr::select(patient_id,gene_symbol,chr,start,vclass,allele,ref,alt,n_ref_count,LOH,role)%>>%
   inner_join(patient_list%>>%filter(race=="white")%>>%dplyr::select(patient_id))%>>%
-  left_join(patient_tdg%>>%mutate(coverage="enough")%>>%dplyr::select(patient_id,coverage))%>>%
+  left_join(patient_hicov%>>%mutate(coverage="enough")%>>%dplyr::select(patient_id,coverage))%>>%
   bind_rows(norm_maf_all_cont%>>%
               filter(!(soma_or_germ=="somatic" & LOH=="no")) %>>%
               tidyr::gather(allele,alt,n_allele1,n_allele2) %>>%
@@ -130,7 +129,7 @@ norm_variant =norm_maf_all %>>%
               mutate(vclass=ifelse(ref=="-"|alt=="-","indel","SNV"),role="control")%>>%
               dplyr::select(patient_id,gene_symbol,chr,start,vclass,allele,ref,alt,n_ref_count,LOH,role)%>>%
               inner_join(patient_list%>>%filter(race=="white")%>>%dplyr::select(patient_id))%>>%
-              left_join(patient_cont%>>%mutate(coverage="enough")%>>%dplyr::select(patient_id,coverage)))
+              left_join(patient_hicov%>>%mutate(coverage="enough")%>>%dplyr::select(patient_id,coverage)))
 
 count_variant(norm_variant,.count_by = "site_num")%>>%bind_cols(count_variant(norm_variant))%>>%
   dplyr::select(TDG_SNV_site_num,TDG_SNV_variant_num,TDG_indel_site_num,TDG_indel_variant_num,
@@ -145,26 +144,32 @@ count_variant(norm_variant,.count_by = "site_num")%>>%bind_cols(count_variant(no
               bind_cols(count_variant(norm_variant,.duplicate = T,.somatic = T,.back = T,.lowcov = T)))%>>%
   write_df("~/Dropbox/work/rare_germ/screening_process.tsv")
 
-######################################## gnomAD (control cases data) ##############################################
+maf_1kg_all=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/1kg_white_maf_all.tsv.gz")%>>%
+  mutate(vclass=ifelse(ref=="-"|alt=="-","indel","SNV"),role="TDG")%>>%
+  bind_rows(read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/1kg_white_maf_all.tsv.gz")%>>%
+              mutate(vclass=ifelse(ref=="-"|alt=="-","indel","SNV"),role="control"))
+inconsistent_site=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/inconsistent_site.tsv")
+count_variant(maf_1kg_all,.count_by = "site_num")%>>%bind_cols(count_variant(maf_1kg_all))%>>%
+  dplyr::select(TDG_SNV_site_num,TDG_SNV_variant_num,TDG_indel_site_num,TDG_indel_variant_num,
+                control_SNV_site_num,control_SNV_variant_num,control_indel_site_num,control_indel_variant_num)%>>%
+  bind_rows(count_variant(maf_1kg_all,.count_by = "site_num",.duplicate = T)%>>%
+              bind_cols(count_variant(maf_1kg_all,.duplicate = T)))%>>%
+  bind_rows(count_variant(maf_1kg_all,.count_by = "site_num",.duplicate = T,.somatic = T)%>>%
+              bind_cols(count_variant(maf_1kg_all,.duplicate = T,.somatic = T)))%>>%
+  bind_rows(count_variant(maf_1kg_all,.count_by = "site_num",.duplicate = T,.somatic = T)%>>%
+              bind_cols(count_variant(maf_1kg_all,.duplicate = T,.somatic = T)))%>>%
+  bind_rows(count_variant(maf_1kg_all,.count_by = "site_num",.duplicate = T,.somatic = T)%>>%
+              bind_cols(count_variant(maf_1kg_all,.duplicate = T,.somatic = T)))%>>%
+  bind_rows(count_variant(maf_1kg_all%>>%anti_join(inconsistent_site),.count_by = "site_num",.duplicate = T,.somatic = T)%>>%
+              bind_cols(count_variant(maf_1kg_all%>>%anti_join(inconsistent_site),.duplicate = T,.somatic = T)))%>>%
+  write_df("~/Dropbox/work/rare_germ/screening_process_1kg.tsv")
+######################################## 1000 genomes (control cases data) ##############################################
 #load classify_consequence() from prepare_tbls.R
-tdg_gnomad = read_tsv("/Volumes/DR8TB2/gnomAD/maf38/non_cancer_maf/non_cancer_top_driver_gene.maf",col_types = cols(LoF_filter="c"))%>>%
-  classify_consequence()%>>%
-  filter(mutype=="inframe_indel" | mutype=="truncating"| mutype=="splice"| mutype=="missense"| mutype=="silent") %>>%
-  mutate(AF=AC/AN,AC_white=AC_fin+AC_nfe+AC_asj,AN_white=AN_fin+AN_nfe+AN_asj,
-         AF_white=(AC_fin+AC_nfe+AC_asj)/(AN_fin+AN_nfe+AN_asj),AF_black=AC_afr/AN_afr) %>>%
-  dplyr::select(chr,posi,ref,alt,mutype,filter,SYMBOL,AC,AN,nhomalt,AF,AC_white,AN_white,AF_white,AF_black) %>>%
-  dplyr::rename(gene_symbol =SYMBOL,start = posi)
-control_gnomad = read_tsv("/Volumes/DR8TB2/gnomAD/maf38/non_cancer_maf/non_cancer_control_gene.maf")%>>%
-  classify_consequence()%>>%
-  filter(mutype=="inframe_indel" | mutype=="truncating"| mutype=="splice"| mutype=="missense"| mutype=="silent") %>>%
-  mutate(AF=AC/AN,AC_white=AC_fin+AC_nfe+AC_asj,AN_white=AN_fin+AN_nfe+AN_asj,
-         AF_white=(AC_fin+AC_nfe+AC_asj)/(AN_fin+AN_nfe+AN_asj),AF_black=AC_afr/AN_afr) %>>%
-  dplyr::select(chr,posi,ref,alt,mutype,filter,SYMBOL,AC,AN,nhomalt,AF,AC_white,AN_white,AF_white,AF_black) %>>%
-  dplyr::rename(gene_symbol =SYMBOL,start = posi) %>>%
-  inner_join(control_genes%>>%dplyr::select(-role))
+inconsistent_site=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/inconsistent_site.tsv")
+sample_num_1kg=503
+tdg_1kg=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/1kg_white_maf.tsv.gz")%>>%anti_join(inconsistent_site)
+control_1kg=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene//1kg_white_maf.tsv.gz")%>>%anti_join(inconsistent_site)
 ############################################### each annotation ##############################################
-all_maf_for_cumulative = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/all_maf_for_cumulative.tsv.gz")
-all_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/all_maf_for_cumulative_control.tsv.gz")
 make_count_tbl=function(.tbl){
   .tbl %>>%
     group_by(gene_symbol,chr,start,ref,alt,mutype)%>>%summarise(MAC=sum(MAC))%>>%ungroup()%>>%
@@ -181,59 +186,33 @@ make_count_tbl=function(.tbl){
     dplyr::select(mutype,lnum_TSG,vnum_TSG,lnum_oncogene,vnum_oncogene,`lnum_oncogene/TSG`,`vnum_oncogene/TSG`,
                   lnum_TDG,vnum_TDG,lnum_control,vnum_control)
 }
-
-if(0){
-full_join(all_maf_for_cumulative,all_maf_for_cumulative_cont)%>>%
-  make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/tcga_all_variant.tsv")
-full_join(all_maf_for_cumulative%>>%inner_join(patient_tdg%>>%dplyr::select(patient_id)),
-          all_maf_for_cumulative_cont%>>%inner_join(patient_cont%>>%dplyr::select(patient_id)))%>>%
-  make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/tcga_age_all_variant.tsv")
-full_join(tdg_gnomad,control_gnomad)%>>%mutate(MAC=ifelse(AF<0.5,AC,AN-AC))%>>%
-  filter(!is.na(AC))%>>% make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/gnomad_all_variant.tsv")
-#################only MAF<0/05%###############
-full_join(all_maf_for_cumulative,all_maf_for_cumulative_cont)%>>%
-  filter(MAF<0.0005)%>>%
-  make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/tcga_rare_variant.tsv")
-full_join(all_maf_for_cumulative%>>%inner_join(patient_tdg%>>%dplyr::select(patient_id)),
-          all_maf_for_cumulative_cont%>>%inner_join(patient_cont%>>%dplyr::select(patient_id)))%>>%
-  filter(MAF<0.0005)%>>%
-  make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/tcga_age_rare_variant.tsv")
-full_join(tdg_gnomad,control_gnomad)%>>%
-  mutate(MAC=ifelse(AF<0.5,AC,AN-AC),MAF=ifelse(AF<0.5,AF,1-AF))%>>%filter(!is.na(AC))%>>%
-  filter(MAF<0.0005)%>>% make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/gnomad_rare_variant.tsv")
-}
 ###################################################  only white ########################################################
+QC_maf_norm=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/QC_norm_maf_all.tsv.gz")
+QC_maf_norm_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/QC_norm_maf_all_cont.tsv.gz")
 white_maf_for_cumulative=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/white_maf_for_cumulative.tsv.gz")
 white_maf_for_cumulative_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/white_maf_for_cumulative_control.tsv.gz")
-#full_join(white_maf_for_cumulative,white_maf_for_cumulative_cont)%>>%
-#  make_count_tbl%>>%
-#  write_df("~/Dropbox/work/rare_germ/white_tcga_all_variant.tsv")
-full_join(white_maf_for_cumulative%>>%inner_join(patient_tdg%>>%dplyr::select(patient_id)),
-          white_maf_for_cumulative_cont%>>%inner_join(patient_cont%>>%dplyr::select(patient_id)))%>>%
+
+bind_rows(QC_maf_norm%>>%inner_join(patient_hicov%>>%filter(race=="white")%>>%dplyr::select(patient_id)),
+          QC_maf_norm_cont%>>%inner_join(patient_hicov%>>%filter(race=="white")%>>%dplyr::select(patient_id)))%>>%
+  mutate(MAC=ifelse(n_allele1==ref,1,2))%>>%
   make_count_tbl%>>%
   write_df("~/Dropbox/work/rare_germ/white_tcga_age_all_variant.tsv")
-full_join(tdg_gnomad,control_gnomad)%>>%mutate(MAC=ifelse(AF_white<0.5,AC_white,AN_white-AC_white))%>>%
-  filter(!is.na(AC_white))%>>% make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/white_gnomad_all_variant.tsv")
+#count minor allele
+bind_rows(white_maf_for_cumulative%>>%inner_join(patient_hicov%>>%filter(race=="white")%>>%dplyr::select(patient_id)),
+          white_maf_for_cumulative_cont%>>%inner_join(patient_hicov%>>%filter(race=="white")%>>%dplyr::select(patient_id)))%>>%
+  make_count_tbl%>>%
+  write_df("~/Dropbox/work/rare_germ/white_tcga_age_all_variant_minorcount.tsv")
+full_join(tdg_1kg,control_1kg)%>>%
+  make_count_tbl%>>%
+  write_df("~/Dropbox/work/rare_germ/white_1kg_all_variant.tsv")
 #################only MAF<0/05%###############
-#full_join(white_maf_for_cumulative,white_maf_for_cumulative_cont)%>>%
-#  filter(MAF<0.0005)%>>%
-#  make_count_tbl%>>%
-#  write_df("~/Dropbox/work/rare_germ/white_tcga_rare_variant.tsv")
-full_join(white_maf_for_cumulative%>>%inner_join(patient_tdg%>>%dplyr::select(patient_id)),
-          white_maf_for_cumulative_cont%>>%inner_join(patient_cont%>>%dplyr::select(patient_id)))%>>%
+full_join(white_maf_for_cumulative%>>%inner_join(patient_hicov%>>%dplyr::select(patient_id)),
+          white_maf_for_cumulative_cont%>>%inner_join(patient_hicov%>>%dplyr::select(patient_id)))%>>%
   filter(MAF<0.0005)%>>%
   make_count_tbl%>>%
   write_df("~/Dropbox/work/rare_germ/white_tcga_age_rare_variant.tsv")
-full_join(tdg_gnomad,control_gnomad)%>>%
-  mutate(MAC=ifelse(AF_white<0.5,AC_white,AN_white-AC_white),MAF=ifelse(AF_white<0.5,AF_white,1-AF_white))%>>%
-  filter(!is.na(AC_white),MAF<0.0005)%>>%
+full_join(tdg_1kg,control_1kg)%>>%
+  filter(MAF<0.0005)%>>%
   make_count_tbl%>>%
-  write_df("~/Dropbox/work/rare_germ/white_gnomad_rare_variant.tsv")
+  write_df("~/Dropbox/work/rare_germ/white_1kg_rare_variant.tsv")
 

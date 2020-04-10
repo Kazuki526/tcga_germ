@@ -200,12 +200,4 @@ write_df(black_maf_for_cumulative_cont,"/Volumes/DR8TB2/tcga_rare_germ/control_g
 #all_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/all_maf_for_cumulative_control.tsv.gz")
 #white_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/white_maf_for_cumulative_control.tsv.gz")
 #black_maf_for_cumulative_cont = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/black_maf_for_cumulative_control.tsv.gz")
-################################################################################################################################
-# filter out low coverage patients
-coverage_cont=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/control_gene/coverage_cont.tsv.gz") 
-patient_cont = patient_list %>>%
-  left_join(coverage_cont%>>%dplyr::select(patient_id,coverage))%>>%
-  filter(coverage>max(coverage)/2)%>>%
-  mutate(border=mean(coverage)-sd(coverage)*2)%>>%
-  filter(coverage>border)%>>%dplyr::select(-coverage,-border)
-write_df(patient_cont,"/Volumes/DR8TB2/tcga_rare_germ/control_gene/patient_list_forcont.tsv")
+

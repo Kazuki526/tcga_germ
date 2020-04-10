@@ -19,7 +19,7 @@ options(scipen=100)
 
 driver_genes=read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/driver_genes.tsv")
 patient_list = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list.tsv",col_types = "cciciiiic")
-patient_tdg = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/patient_list_forTGD.tsv",col_types = "cciciiiic")
+patient_hicov = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/patient_list_exclude_low_coverage.tsv",col_types = "cciciiiic")
 ################ read MAF extracted ################
 white_maf_for_cumulative = read_tsv("/Volumes/DR8TB2/tcga_rare_germ/top_driver_gene/white_maf_for_cumulative.tsv.gz")%>>%
   filter(chr!="chrX",FILTER=="PASS")
@@ -43,7 +43,7 @@ truncating_count = white_maf_for_cumulative %>>%
   #count(cancer_type,patient_id,gene_symbol) %>>%dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
   #0個の患者も入れる
-  right_join(patient_tdg)%>>%filter(race=="white",!is.na(age))%>>%
+  right_join(patient_hicov)%>>%filter(race=="white",!is.na(age))%>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n)) %>>%
   mutate(age=round(age/365.25*100)/100)
 
@@ -79,7 +79,7 @@ truncating_count_rare = white_maf_for_cumulative %>>%
   #count(cancer_type,patient_id,gene_symbol) %>>%dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
   #0個の患者も入れる
-  right_join(patient_tdg)%>>%filter(race=="white",!is.na(age))%>>%
+  right_join(patient_hicov)%>>%filter(race=="white",!is.na(age))%>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n),
          age=round(age/365.25*100)/100)
 
@@ -119,7 +119,7 @@ truncating_count_onco_rare = white_maf_for_cumulative %>>%
   filter(role=="oncogene"|role=="oncogene/TSG")%>>%
   #count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
-  right_join(patient_tdg)%>>%filter(race=="white",!is.na(age))%>>%
+  right_join(patient_hicov)%>>%filter(race=="white",!is.na(age))%>>%
   mutate(age=round(age/365.25*100)/100) %>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
 
@@ -159,7 +159,7 @@ if(0){
     filter(role=="oncogene"|role=="oncogene/TSG")%>>%
     #count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
     group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
-    right_join(patient_tdg)%>>%filter(race=="white",!is.na(age))%>>%
+    right_join(patient_hicov)%>>%filter(race=="white",!is.na(age))%>>%
     mutate(age=round(age/365.25*100)/100) %>>%
     mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
   
@@ -197,7 +197,7 @@ truncating_count = black_maf_for_cumulative %>>%
   #count(cancer_type,patient_id,gene_symbol) %>>%dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
   #0個の患者も入れる
-  right_join(patient_tdg)%>>%filter(race=="black",!is.na(age))%>>%
+  right_join(patient_hicov)%>>%filter(race=="black",!is.na(age))%>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n)) %>>%
   mutate(age=round(age/365.25*100)/100)
 
@@ -233,7 +233,7 @@ if(1){
     #count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
     group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
     #0個の患者も入れる
-    right_join(patient_tdg)%>>%filter(race=="black",!is.na(age))%>>%
+    right_join(patient_hicov)%>>%filter(race=="black",!is.na(age))%>>%
     mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n),
            age=round(age/365.25*100)/100)
   
@@ -266,7 +266,7 @@ truncating_count_onco_rare = black_maf_for_cumulative %>>%
   filter(role=="oncogene"|role=="oncogene/TSG")%>>%
   #count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
   group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
-  right_join(patient_tdg)%>>%filter(race=="black",!is.na(age))%>>%
+  right_join(patient_hicov)%>>%filter(race=="black",!is.na(age))%>>%
   mutate(age=round(age/365.25*100)/100) %>>%
   mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
 
@@ -298,7 +298,7 @@ if(1){
     filter(role=="oncogene"|role=="oncogene/TSG")%>>%
     #count(cancer_type,patient_id,gene_symbol) %>>% dplyr::select(-n)%>>%
     group_by(cancer_type,patient_id) %>>%summarise(truncating_count_n=n())%>>%ungroup()%>>%
-    right_join(patient_tdg)%>>%filter(race=="black",!is.na(age))%>>%
+    right_join(patient_hicov)%>>%filter(race=="black",!is.na(age))%>>%
     mutate(age=round(age/365.25*100)/100) %>>%
     mutate(truncating_count_n=ifelse(is.na(truncating_count_n),0,truncating_count_n))
   

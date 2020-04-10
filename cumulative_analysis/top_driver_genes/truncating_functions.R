@@ -170,7 +170,7 @@ truncate_plot_bycantype = function(.tbl,.permu=T,.test_tail="one",.permu_do=F,.p
 make_regression_tabel_truncate = function(.maf=all_maf_for_cumulative,.vcf=tdg_gnomad,.race="all",.role = "TSG",
                                  .fdr=0.01,.max_maf=50,.maf_filter=F,
                                  .database="all",.duplicate=T,.somatic=T,.varscan=T,.pathogenic = F,
-                                 .patient_list = patient_tdg,.remove0=F){
+                                 .patient_list = patient_hicov,.remove0=F){
   regression_out = function(.class,.maf,.role,.patient_list){
     if((.class*10000) %% 100 == 0){print(paste0("doing MAF=",.class*100))}
     ##missense の数
