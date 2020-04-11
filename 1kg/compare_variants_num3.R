@@ -283,7 +283,8 @@ count_by_gene = function(.tbl,.database="tcga"){
                 `1000 genomes synonymous`   =paste0(round(mean(silent),digits=3),    "(",round(sd(silent),digits=3),    ")"))
   }
 }
-white_maf_for_cumulative%>>%inner_join(patient_hicov%>>%dplyr::select(patient_id))%>>%
+sample_gene_tbl =
+  white_maf_for_cumulative%>>%inner_join(patient_hicov%>>%dplyr::select(patient_id))%>>%
   filter(mutype!="inframe_indel",MAF<=.MAF)%>>%
   mutate(mutype=ifelse(mutype=="splice","truncating",mutype))%>%
   inner_join(driver_genes)%>>%
@@ -302,6 +303,6 @@ white_maf_for_cumulative%>>%inner_join(patient_hicov%>>%dplyr::select(patient_id
               unnest())%>>%
   left_join(driver_genes)%>>%
   mutate_all(~ifelse(is.na(.),"0(0)",.))%>>%
-  arrange(role,gene_symbol)%>>%
-  write_df("~/Dropbox/work/rare_germ/compare_analysis/compare_variants_spread_bygene.tsv")
+  arrange(role,gene_symbol)
+write_df(sample_gene_tbl,"~/Dropbox/work/rare_germ/compare_analysis/compare_variants_spread_bygene.tsv")
   
