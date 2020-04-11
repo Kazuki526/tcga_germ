@@ -212,37 +212,59 @@ sample_tbl %>>%
 control_variants = sample_tbl%>>%
   filter(role=="control")%>>%
   group_by(Database,mutype)%>>%summarise(control_MAC=mean(MAC))
-observed_data=sample_tbl %>>%filter(role!="control")%>>%left_join(control_variants)%>>%
-  mutate(MAC_corrected=MAC/control_MAC)%>>%dplyr::select(-MAC,-control_MAC) %>>%
-  group_by(Database,role,mutype)%>>%summarise(MAC_corrected=mean(MAC_corrected))%>>%ungroup()%>>%
-  tidyr::pivot_wider(names_from = c("role","mutype"),values_from = "MAC_corrected")%>>%(?.)%>>%
-  dplyr::select(-Database)%>>%summarise_all(~diff(.))%>>%
-  tidyr::pivot_longer(cols=-NULL,names_to = c("role","mutype"),values_to = "observed_dif",names_sep = "_")
-.sample_tbl=sample_tbl %>>%filter(role!="control")%>>%left_join(control_variants)%>>%
-  mutate(MAC_corrected=MAC/control_MAC)%>>%dplyr::select(-MAC,-control_MAC) %>>%
-  tidyr::pivot_wider(names_from = c("role","mutype"),values_from = "MAC_corrected")%>>%ungroup()
-permutation=function(.times){
+permutation=function(.times,.sample_tbl){
   if(.times %% 1000 == 0){print(paste0("permutation ",.times," times now"))}
   .sample_tbl%>>%dplyr::select(-patient_id)%>>%
     mutate(Database=sample(Database,length(Database)))%>>%
     group_by(Database)%>>%summarise_all(~mean(.))%>>%ungroup()%>>%
     dplyr::select(-Database)%>>%summarise_all(~diff(.))
 }
-
+######### permutation doin on crrected value ##########
+.sample_tbl=sample_tbl %>>%filter(role!="control")%>>%left_join(control_variants)%>>%
+  mutate(MAC_corrected=MAC/control_MAC)%>>%dplyr::select(-MAC,-control_MAC) %>>%
+  tidyr::pivot_wider(names_from = c("role","mutype"),values_from = "MAC_corrected")%>>%ungroup()
 permutation_tbl=tibble(times=1:10000)%>>%
-  mutate(result=purrr::map(times,~permutation(.)))%>>%unnest()
+  mutate(result=purrr::map(times,~permutation(.,.sample_tbl)))%>>%unnest()
+observed_data=sample_tbl %>>%filter(role!="control")%>>%left_join(control_variants)%>>%
+  mutate(MAC_corrected=MAC/control_MAC)%>>%dplyr::select(-MAC,-control_MAC) %>>%
+  group_by(Database,role,mutype)%>>%summarise(MAC_corrected=mean(MAC_corrected))%>>%ungroup()%>>%
+  tidyr::pivot_wider(names_from = c("role","mutype"),values_from = "MAC_corrected")%>>%(?.)%>>%
+  dplyr::select(-Database)%>>%summarise_all(~diff(.))%>>%
+  tidyr::pivot_longer(cols=-NULL,names_to = c("role","mutype"),values_to = "observed_dif",names_sep = "_")
 permutation_tbl%>>%
   pivot_longer(cols=-times,names_to = c("role","mutype"),values_to = "perm_dif",names_sep = "_") %>>%
   left_join(observed_data)%>>%
   filter(perm_dif<observed_dif)%>>%
   count(role,mutype)
-#1 TSG      missense    8679
-#2 TSG      silent      1982
-#3 TSG      truncating  2433
-#4 oncogene missense    7875
-#5 oncogene silent      3730
-#6 oncogene truncating  7992
+#1 TSG      missense    8691
+#2 TSG      silent      2036
+#3 TSG      truncating  2307
+#4 oncogene missense    7866
+#5 oncogene silent      3794
+#6 oncogene truncating  8010
 
+
+########## permutation doin on crrected value ###########
+.sample_tbl_raw=sample_tbl %>>%filter(role!="control")%>>%rename(MAC_corrected=MAC)%>>%
+  tidyr::pivot_wider(names_from = c("role","mutype"),values_from = "MAC_corrected")%>>%ungroup()
+permutation_tbl_raw=tibble(times=1:10000)%>>%
+  mutate(result=purrr::map(times,~permutation(.,.sample_tbl_raw)))%>>%unnest()
+observed_data_raw=sample_tbl %>>%filter(role!="control")%>>%rename(MAC_corrected=MAC)%>>%
+  group_by(Database,role,mutype)%>>%summarise(MAC_corrected=mean(MAC_corrected))%>>%ungroup()%>>%
+  tidyr::pivot_wider(names_from = c("role","mutype"),values_from = "MAC_corrected")%>>%(?.)%>>%
+  dplyr::select(-Database)%>>%summarise_all(~diff(.))%>>%
+  tidyr::pivot_longer(cols=-NULL,names_to = c("role","mutype"),values_to = "observed_dif",names_sep = "_")
+permutation_tbl_raw%>>%
+  pivot_longer(cols=-times,names_to = c("role","mutype"),values_to = "perm_dif",names_sep = "_") %>>%
+  left_join(observed_data_raw)%>>%
+  filter(perm_dif<observed_dif)%>>%
+  count(role,mutype)
+#1 TSG      missense    9613
+#2 TSG      silent      4109
+#3 TSG      truncating  9459
+#4 oncogene missense    9029
+#5 oncogene silent      5811
+#6 oncogene truncating  7955
 
 ###########################################################################################################
 ############ by gene ###########
